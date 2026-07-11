@@ -354,7 +354,7 @@ async def generate_reply(
 
 
 async def publish_or_shadow(
-    db: AsyncSession, candidate: Candidate, settings: Settings
+    db: AsyncSession, candidate: Candidate, settings: Settings, force_shadow: bool = False
 ) -> PublishedReply:
     await db.refresh(candidate, ["content"])
     existing = await db.scalar(
@@ -383,7 +383,8 @@ async def publish_or_shadow(
     )
     product = await db.get(Product, candidate.product_id)
     can_publish = bool(
-        product
+        not force_shadow
+        and product
         and product.autopublish_enabled
         and decision.decision == "ALLOW_AUTOREPLY"
         and account

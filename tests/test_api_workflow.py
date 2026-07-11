@@ -39,7 +39,12 @@ async def test_complete_guarded_workflow(api_client):
     assert (await client.get("/health")).status_code == 200
 
     created = await client.post(
-        "/v1/products", json={"name": "Smoke Pilot", "daily_reply_limit": 3}
+        "/v1/products",
+        json={
+            "name": "Smoke Pilot",
+            "website_url": "https://example.com",
+            "daily_reply_limit": 3,
+        },
     )
     assert created.status_code == 201
     product_id = created.json()["id"]

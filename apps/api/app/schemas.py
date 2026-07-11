@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 class ProductBrainClaim(BaseModel):
@@ -45,6 +45,12 @@ class ProductCreate(BaseModel):
     website_url: HttpUrl | None = None
     github_url: HttpUrl | None = None
     daily_reply_limit: int = Field(default=3, ge=1, le=5)
+
+    @model_validator(mode="after")
+    def require_public_source(self):
+        if not self.website_url and not self.github_url:
+            raise ValueError("请至少填写产品网站或 GitHub 仓库地址")
+        return self
 
 
 class ProductUpdate(BaseModel):

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,6 +55,8 @@ from .services import (
     record_event,
     run_policy,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -123,8 +126,13 @@ async def product(product_id: str, db: AsyncSession = Depends(get_db)):
 @app.patch("/v1/products/{product_id}", response_model=ProductOut)
 async def patch_product(product_id: str, body: ProductUpdate, db: AsyncSession = Depends(get_db)):
     product = await get_product(product_id, db)
-    for key, value in body.model_dump(exclude_unset=True).items():
-        setattr(product, key, str(value) if key.endswith("_url") else value)
+    changes = body.model_dump(exclude_unset=True)
+    website_url = changes.get("website_url", product.website_url)
+    github_url = changes.get("github_url", product.github_url)
+    if not website_url and not github_url:
+        raise HTTPException(422, "请至少保留产品网站或 GitHub 仓库地址")
+    for key, value in changes.items():
+        setattr(product, key, str(value) if key.endswith("_url") and value is not None else value)
     await db.commit()
     await db.refresh(product)
     return product
@@ -176,6 +184,14 @@ async def brain_build(product_id: str, db: AsyncSession = Depends(get_db)):
         version = await build_brain(db, product, provider_for(get_settings()))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Product Brain provider failed for product %s", product_id)
+        await db.rollback()
+        product = await db.get(Product, product_id)
+        if product:
+            product.status = "ANALYSIS_FAILED"
+            await db.commit()
+        raise HTTPException(503, "模型服务暂时不可用，请稍后重试") from exc
     return BrainOut(id=version.id, version=version.version, brain=version.brain_json)
 
 
@@ -339,11 +355,13 @@ async def opportunity_reply(candidate_id: str, db: AsyncSession = Depends(get_db
 
 
 @app.post("/v1/opportunities/{candidate_id}/publish")
-async def opportunity_publish(candidate_id: str, db: AsyncSession = Depends(get_db)):
+async def opportunity_publish(
+    candidate_id: str, force_shadow: bool = False, db: AsyncSession = Depends(get_db)
+):
     candidate = await db.get(Candidate, candidate_id)
     if not candidate:
         raise HTTPException(404, "Opportunity not found")
-    pub = await publish_or_shadow(db, candidate, get_settings())
+    pub = await publish_or_shadow(db, candidate, get_settings(), force_shadow=force_shadow)
     return {"id": pub.id, "status": pub.status, "idempotency_key": pub.idempotency_key}
 
 

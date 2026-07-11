@@ -1,14 +1,17 @@
 import Link from "next/link";
+import {notFound} from "next/navigation";
 import {getAnalytics,getBrain,getProduct,getSubreddits} from "@/lib/api";
 import {zhLabel} from "@/lib/labels";
 import RebuildBrainButton from "./RebuildBrainButton";
+import ProductModeControls from "./ProductModeControls";
+import ProductSettingsForm from "./ProductSettingsForm";
 
 function Items({items}:{items?:string[]}){return items?.length?<ul>{items.map((item,i)=><li key={i}>{item}</li>)}</ul>:<p>暂未识别。</p>}
 
 export default async function ProductPage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
   const [p,brain,a,subs]=await Promise.all([getProduct(id),getBrain(id),getAnalytics(id),getSubreddits(id)]);
-  if(!p)return <p>没有找到这个产品。</p>;
+  if(!p)notFound();
   const b=brain?.brain||{};
   return <>
     <div className="eyebrow">产品分析 · Brain v{brain?.version||"—"}</div>
@@ -19,6 +22,7 @@ export default async function ProductPage({params}:{params:Promise<{id:string}>}
       <Link className="button secondary" href={`/products/${id}/conversations`}>对话跟进</Link>
       <Link className="button secondary" href={`/products/${id}/safety`}>安全审计</Link>
       <RebuildBrainButton productId={id}/>
+      <ProductModeControls productId={id} status={p.status}/>
     </div>
     <section className="grid">
       <div className="card"><div className="label">产品状态</div><div className="metric" style={{fontSize:20}}>{zhLabel(p.status)}</div></div>
@@ -34,6 +38,7 @@ export default async function ProductPage({params}:{params:Promise<{id:string}>}
       <div className="card wide"><div className="label">有来源支持的能力声明</div>{(b.supported_claims||[]).map((c:any,i:number)=><div key={i}><p><span className="status">证据置信度 {Math.round((c.confidence||0)*100)}%</span> {c.claim}</p><blockquote>{c.source_quote}</blockquote></div>)}{!(b.supported_claims||[]).length&&<p>暂时没有通过证据校验的声明。</p>}</div>
       <div className="card wide"><div className="label">不确定或缺少证据</div><Items items={b.unsupported_or_uncertain_claims}/></div>
       <div className="card wide"><div className="label">高意向检索信号</div><p><strong>直接需求：</strong> {(b.query_graph?.direct_terms||[]).join(" · ")||"未设置"}</p><p><strong>痛点表达：</strong> {(b.query_graph?.pain_phrases||[]).join(" · ")||"未设置"}</p><p><strong>意图表达：</strong> {(b.query_graph?.intent_patterns||[]).join(" · ")||"未设置"}</p></div>
+      <div className="card full"><div className="label">产品设置</div><h2>修正来源与运行参数</h2><p>如果首次抓取失败，可以在这里修正网站或 GitHub 地址，保存后再点击“刷新资料并重新分析”。</p><ProductSettingsForm product={p}/></div>
       <div className="card wide"><div className="label">网站追踪 SDK</div><pre>{`<script src="${process.env.NEXT_PUBLIC_API_URL||"http://localhost:8000"}/v1/tracking/sdk.js" data-project="${p.id}"></script>`}</pre></div>
       <div className="card wide"><div className="label">当前漏斗</div><p>已扫描 {a?.scanned??0}，合格机会 {a?.qualified_opportunities??0}，访问 {a?.visits??0}，注册 {a?.signups??0}，激活 {a?.activations??0}。</p></div>
     </section>
