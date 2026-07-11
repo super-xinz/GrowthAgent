@@ -10,4 +10,7 @@ def test_negative_reaction_stops_conversation():
 
 
 def test_moderator_warning_has_priority():
-    assert classify_followup_intent("Moderator note: this was removed for rule violation.") == "MOD_WARNING"
+    assert (
+        classify_followup_intent("Moderator note: this was removed for rule violation.")
+        == "MOD_WARNING"
+    )

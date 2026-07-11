@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./reddit_growth.db"
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     global_kill_switch: bool = False
     reddit_app_approval_status: str = "DEVELOPMENT_ONLY"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 @lru_cache
 def get_settings() -> Settings:

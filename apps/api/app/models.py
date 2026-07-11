@@ -1,12 +1,30 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-def now(): return datetime.now(timezone.utc)
-def uid(): return str(uuid.uuid4())
 
-class Base(DeclarativeBase): pass
+def now():
+    return datetime.now(timezone.utc)
+
+
+def uid():
+    return str(uuid.uuid4())
+
+
+class Base(DeclarativeBase):
+    pass
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -28,6 +46,7 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     sources = relationship("ProductSource", cascade="all, delete-orphan")
 
+
 class RedditAccount(Base):
     __tablename__ = "reddit_accounts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
@@ -40,10 +59,13 @@ class RedditAccount(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+
 class ProductSource(Base):
     __tablename__ = "product_sources"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     source_type: Mapped[str] = mapped_column(String(30))
     url: Mapped[str] = mapped_column(String(2048))
     title: Mapped[str] = mapped_column(String(500), default="")
@@ -53,20 +75,26 @@ class ProductSource(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint("product_id", "url", "content_hash"),)
 
+
 class ProductBrainVersion(Base):
     __tablename__ = "product_brain_versions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     version: Mapped[int] = mapped_column(Integer)
     brain_json: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (UniqueConstraint("product_id", "version"),)
 
+
 class QueryTerm(Base):
     __tablename__ = "query_terms"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     term_type: Mapped[str] = mapped_column(String(40))
     term: Mapped[str] = mapped_column(String(500))
     weight: Mapped[float] = mapped_column(Float, default=1)
@@ -74,6 +102,7 @@ class QueryTerm(Base):
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
 
 class Subreddit(Base):
     __tablename__ = "subreddits"
@@ -84,11 +113,16 @@ class Subreddit(Base):
     rules_json: Mapped[dict] = mapped_column(JSON, default=dict)
     rules_last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+
 class ProductSubreddit(Base):
     __tablename__ = "product_subreddits"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
-    subreddit_id: Mapped[str] = mapped_column(ForeignKey("subreddits.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    subreddit_id: Mapped[str] = mapped_column(
+        ForeignKey("subreddits.id", ondelete="CASCADE"), index=True
+    )
     status: Mapped[str] = mapped_column(String(40), default="ALLOW_READ_ONLY")
     community_score: Mapped[float] = mapped_column(Float, default=0.5)
     promotion_tolerance: Mapped[float] = mapped_column(Float, default=0.2)
@@ -99,6 +133,7 @@ class ProductSubreddit(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     subreddit = relationship("Subreddit")
     __table_args__ = (UniqueConstraint("product_id", "subreddit_id"),)
+
 
 class RedditContent(Base):
     __tablename__ = "reddit_contents"
@@ -120,11 +155,16 @@ class RedditContent(Base):
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     raw_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
+
 class Candidate(Base):
     __tablename__ = "candidates"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
-    reddit_content_id: Mapped[str] = mapped_column(ForeignKey("reddit_contents.id", ondelete="CASCADE"))
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    reddit_content_id: Mapped[str] = mapped_column(
+        ForeignKey("reddit_contents.id", ondelete="CASCADE")
+    )
     status: Mapped[str] = mapped_column(String(30), default="RECALLED")
     recall_sources: Mapped[list] = mapped_column(JSON, default=list)
     bm25_score: Mapped[float] = mapped_column(Float, default=0)
@@ -138,10 +178,13 @@ class Candidate(Base):
     content = relationship("RedditContent")
     __table_args__ = (UniqueConstraint("product_id", "reddit_content_id"),)
 
+
 class PolicyDecision(Base):
     __tablename__ = "policy_decisions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    candidate_id: Mapped[str] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("candidates.id", ondelete="CASCADE"), index=True
+    )
     policy_version: Mapped[str] = mapped_column(String(30), default="v1")
     decision: Mapped[str] = mapped_column(String(40))
     reply_mode: Mapped[str] = mapped_column(String(60), default="NONE")
@@ -153,19 +196,25 @@ class PolicyDecision(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     candidate = relationship("Candidate")
 
+
 class ReplyPlan(Base):
     __tablename__ = "reply_plans"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    candidate_id: Mapped[str] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("candidates.id", ondelete="CASCADE"), index=True
+    )
     plan_json: Mapped[dict] = mapped_column(JSON, default=dict)
     claim_ids: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(40), default="PLANNED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+
 class GeneratedReply(Base):
     __tablename__ = "generated_replies"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    candidate_id: Mapped[str] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("candidates.id", ondelete="CASCADE"), index=True
+    )
     policy_decision_id: Mapped[str | None] = mapped_column(ForeignKey("policy_decisions.id"))
     reply_plan_id: Mapped[str | None] = mapped_column(ForeignKey("reply_plans.id"))
     body: Mapped[str] = mapped_column(Text)
@@ -174,16 +223,21 @@ class GeneratedReply(Base):
     quality_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+
 class PublishedReply(Base):
     __tablename__ = "published_replies"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    candidate_id: Mapped[str] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("candidates.id", ondelete="CASCADE"), index=True
+    )
     reddit_account_id: Mapped[str | None] = mapped_column(ForeignKey("reddit_accounts.id"))
     reddit_comment_id: Mapped[str] = mapped_column(String(80), unique=True)
     parent_reddit_fullname: Mapped[str] = mapped_column(String(40))
     body: Mapped[str] = mapped_column(Text)
     body_hash: Mapped[str] = mapped_column(String(64))
-    product_brain_version_id: Mapped[str | None] = mapped_column(ForeignKey("product_brain_versions.id"))
+    product_brain_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("product_brain_versions.id")
+    )
     policy_decision_id: Mapped[str | None] = mapped_column(ForeignKey("policy_decisions.id"))
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
     status: Mapped[str] = mapped_column(String(40), default="SHADOW_RECORDED")
@@ -191,10 +245,13 @@ class PublishedReply(Base):
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+
 class Conversation(Base):
     __tablename__ = "conversations"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     published_reply_id: Mapped[str | None] = mapped_column(ForeignKey("published_replies.id"))
     state: Mapped[str] = mapped_column(String(40), default="POSTED")
     engagement_score: Mapped[float] = mapped_column(Float, default=0)
@@ -207,10 +264,13 @@ class Conversation(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     published_reply = relationship("PublishedReply")
 
+
 class ConversationMessage(Base):
     __tablename__ = "conversation_messages"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
     reddit_comment_id: Mapped[str] = mapped_column(String(80), unique=True)
     author_type: Mapped[str] = mapped_column(String(30))
     body: Mapped[str] = mapped_column(Text)
@@ -218,20 +278,26 @@ class ConversationMessage(Base):
     created_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+
 class TrackingLink(Base):
     __tablename__ = "tracking_links"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id"))
     short_code: Mapped[str] = mapped_column(String(40), unique=True)
     destination_url: Mapped[str] = mapped_column(String(2048))
     utm_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+
 class TrackingEvent(Base):
     __tablename__ = "tracking_events"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str | None] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     tracking_link_id: Mapped[str | None] = mapped_column(ForeignKey("tracking_links.id"))
     anonymous_id: Mapped[str | None] = mapped_column(String(120))
     user_id: Mapped[str | None] = mapped_column(String(120))
@@ -242,10 +308,13 @@ class TrackingEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+
 class RiskEvent(Base):
     __tablename__ = "risk_events"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str | None] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     reddit_account_id: Mapped[str | None] = mapped_column(ForeignKey("reddit_accounts.id"))
     subreddit_id: Mapped[str | None] = mapped_column(ForeignKey("subreddits.id"))
     conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id"))
@@ -254,6 +323,7 @@ class RiskEvent(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     action_taken: Mapped[str] = mapped_column(String(120), default="AUDIT_ONLY")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
 
 class ModelRun(Base):
     __tablename__ = "model_runs"

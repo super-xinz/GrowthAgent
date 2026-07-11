@@ -1,11 +1,13 @@
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
+
 class ProductBrainClaim(BaseModel):
     claim: str = Field(min_length=12, max_length=500)
     source_id: str = Field(min_length=1)
     source_quote: str = Field(min_length=8, max_length=700)
     confidence: float = Field(ge=0, le=1)
+
 
 class ProductBrainQueryGraph(BaseModel):
     direct_terms: list[str] = Field(min_length=3)
@@ -15,8 +17,10 @@ class ProductBrainQueryGraph(BaseModel):
     use_cases: list[str] = Field(min_length=3)
     negative_terms: list[str]
 
+
 class ProductBrainData(BaseModel):
     """Strict contract shared by the LLM, retrieval pipeline, and UI."""
+
     model_config = ConfigDict(extra="ignore")
     product_name: str = Field(min_length=1)
     one_liner: str = Field(min_length=20, max_length=400)
@@ -35,11 +39,13 @@ class ProductBrainData(BaseModel):
     disclosure_identity: str = Field(min_length=5)
     query_graph: ProductBrainQueryGraph
 
+
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     website_url: HttpUrl | None = None
     github_url: HttpUrl | None = None
     daily_reply_limit: int = Field(default=3, ge=1, le=5)
+
 
 class ProductUpdate(BaseModel):
     name: str | None = None
@@ -54,6 +60,7 @@ class ProductUpdate(BaseModel):
     forbidden_claims: list[str] | None = None
     recommend_when: list[str] | None = None
     do_not_recommend_when: list[str] | None = None
+
 
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -72,6 +79,7 @@ class ProductOut(BaseModel):
     recommend_when: list
     do_not_recommend_when: list
 
+
 class SourceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -80,10 +88,12 @@ class SourceOut(BaseModel):
     title: str
     content_hash: str
 
+
 class BrainOut(BaseModel):
     id: str
     version: int
     brain: dict[str, Any]
+
 
 class OpportunityOut(BaseModel):
     id: str
@@ -101,10 +111,12 @@ class OpportunityOut(BaseModel):
     generated_reply: str | None = None
     publish_status: str | None = None
 
+
 class RedditAccountCreate(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     status: str = "ACTIVE"
     app_approval_status: str = "DEVELOPMENT_ONLY"
+
 
 class RedditAccountOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -112,6 +124,7 @@ class RedditAccountOut(BaseModel):
     username: str
     status: str
     app_approval_status: str
+
 
 class SubredditOut(BaseModel):
     id: str
@@ -122,10 +135,12 @@ class SubredditOut(BaseModel):
     risk_score: float
     rules: dict[str, Any]
 
+
 class ProductSubredditPatch(BaseModel):
     status: str | None = None
     promotion_tolerance: float | None = Field(default=None, ge=0, le=1)
     risk_score: float | None = Field(default=None, ge=0, le=1)
+
 
 class DecisionOut(BaseModel):
     id: str
@@ -135,11 +150,13 @@ class DecisionOut(BaseModel):
     required_disclosure: bool
     reason_codes: list
 
+
 class ReplyOut(BaseModel):
     id: str
     body: str
     status: str
     quality: dict[str, Any]
+
 
 class ConversationOut(BaseModel):
     id: str
@@ -149,6 +166,7 @@ class ConversationOut(BaseModel):
     last_activity_at: Any
     next_check_at: Any | None
     closed_reason: str | None
+
 
 class AnalyticsOverviewOut(BaseModel):
     scanned: int
@@ -165,6 +183,7 @@ class AnalyticsOverviewOut(BaseModel):
     negative_interactions: int
     risk_level: str
 
+
 class TrackingEventIn(BaseModel):
     event: str
     product_id: str | None = None
@@ -173,6 +192,7 @@ class TrackingEventIn(BaseModel):
     user_id: str | None = None
     timestamp: Any | None = None
     properties: dict[str, Any] = Field(default_factory=dict)
+
 
 class FollowupIn(BaseModel):
     body: str

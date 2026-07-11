@@ -6,7 +6,16 @@ from app.services import _normalize_brain_output
 
 
 def test_provider_claim_aliases_are_normalized():
-    raw = {"claims": [{"claim": "A sufficiently detailed factual capability.", "source_id": "source-1", "quote": "Exact evidence quote", "confidence": 0.9}]}
+    raw = {
+        "claims": [
+            {
+                "claim": "A sufficiently detailed factual capability.",
+                "source_id": "source-1",
+                "quote": "Exact evidence quote",
+                "confidence": 0.9,
+            }
+        ]
+    }
     normalized = _normalize_brain_output(raw)
     assert "claims" not in normalized
     assert normalized["supported_claims"][0]["source_quote"] == "Exact evidence quote"
