@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: reddit_growth
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d reddit_growth"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  api:
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    env_file: .env
+    ports: ["8000:8000"]
+    volumes: [./apps/api:/app/apps/api, ./packages:/app/packages, ./tests:/app/tests]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+  worker:
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    command: celery -A app.worker.celery_app worker --loglevel=INFO
+    env_file: .env
+    volumes: [./apps/api:/app/apps/api, ./packages:/app/packages]
+    depends_on: [postgres, redis]
+  web:
+    build: {context: ., dockerfile: infra/docker/web.Dockerfile}
+    environment:
+      API_URL: http://api:8000
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    depends_on: [api]
+volumes:
+  postgres_data:
