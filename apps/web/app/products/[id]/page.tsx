@@ -1,10 +1,10 @@
-import Link from "next/link";
 import {notFound} from "next/navigation";
 import {getAnalytics,getBrain,getProduct,getSubreddits} from "@/lib/api";
 import {zhLabel} from "@/lib/labels";
 import RebuildBrainButton from "./RebuildBrainButton";
 import ProductModeControls from "./ProductModeControls";
 import ProductSettingsForm from "./ProductSettingsForm";
+import ProductBreadcrumbs from "./ProductBreadcrumbs";
 
 function Items({items}:{items?:string[]}){return items?.length?<ul>{items.map((item,i)=><li key={i}>{item}</li>)}</ul>:<p>暂未识别。</p>}
 
@@ -14,13 +14,11 @@ export default async function ProductPage({params}:{params:Promise<{id:string}>}
   if(!p)notFound();
   const b=brain?.brain||{};
   return <>
+    <ProductBreadcrumbs product={p} section="产品概览"/>
     <div className="eyebrow">产品分析 · Brain v{brain?.version||"—"}</div>
     <h1>{p.name}</h1>
     <p>{b.one_liner||"Product Brain 尚未构建。"}</p>
     <div className="actions">
-      <Link className="button secondary" href={`/products/${id}/opportunities`}>机会雷达</Link>
-      <Link className="button secondary" href={`/products/${id}/conversations`}>对话跟进</Link>
-      <Link className="button secondary" href={`/products/${id}/safety`}>安全审计</Link>
       <RebuildBrainButton productId={id}/>
       <ProductModeControls productId={id} status={p.status}/>
     </div>

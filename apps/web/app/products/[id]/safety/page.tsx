@@ -1,15 +1,17 @@
-import Link from "next/link";
+import {notFound} from "next/navigation";
 import {getAuditLog,getHealth,getProduct,getRiskEvents,getSubreddits} from "@/lib/api";
 import {zhLabel} from "@/lib/labels";
+import ProductBreadcrumbs from "../ProductBreadcrumbs";
 
 export default async function Safety({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
   const [p,subs,risks,audit,health]=await Promise.all([getProduct(id),getSubreddits(id),getRiskEvents(id),getAuditLog(id),getHealth()]);
+  if(!p)notFound();
   return <>
+    <ProductBreadcrumbs product={p} section="安全"/>
     <div className="eyebrow">安全策略与审计</div>
     <h1>策略门禁</h1>
     <p>真实发布只有在环境开关、Reddit 批准状态、专用账号、社区规则、机会策略、配额和全局停止开关全部允许时才可能执行。当前 Reddit 状态：{zhLabel(health?.reddit_app_status,"未知")}；全局自动发布：{health?.autopublish?"已开启":"已关闭"}；全局停止开关：{health?.kill_switch?"已触发":"未触发"}。</p>
-    <div className="actions"><Link className="button secondary" href={`/products/${id}`}>产品分析</Link><Link className="button secondary" href={`/products/${id}/opportunities`}>机会雷达</Link></div>
     <section className="grid">
       <div className="card"><div className="label">产品自动发布</div><div className="metric" style={{fontSize:20}}>{p?.autopublish_enabled?"已开启":"已关闭"}</div></div>
       <div className="card"><div className="label">每日回复上限</div><div className="metric">{p?.daily_reply_limit??0}</div></div>

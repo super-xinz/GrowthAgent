@@ -2,26 +2,49 @@
 
 import Link from "next/link";
 import {usePathname} from "next/navigation";
+import {isNavActive, parseProductId, type ProductNavItem} from "@/lib/navigation";
+import ProductSwitcher from "./ProductSwitcher";
 
-type NavItem={href:string;label:string;exact?:boolean};
+type NavItem = {href: string; label: string};
 
-export default function SidebarNav(){
-  const pathname=usePathname();
-  const match=pathname.match(/^\/products\/([^/]+)/);
-  const productId=match?.[1]!=="new"?match?.[1]:null;
-  const baseItems:NavItem[]=[
-    {href:"/dashboard",label:"总览",exact:true},
-    {href:"/products/new",label:"添加产品",exact:true},
-  ];
-  const productItems:NavItem[]=productId?[
-    {href:`/products/${productId}`,label:"产品分析",exact:true},
-    {href:`/products/${productId}/opportunities`,label:"机会雷达",exact:true},
-    {href:`/products/${productId}/conversations`,label:"对话跟进",exact:true},
-    {href:`/products/${productId}/safety`,label:"安全审计",exact:true},
-  ]:[];
-  const render=(item:NavItem)=>{
-    const active=item.exact?pathname===item.href:pathname.startsWith(item.href);
-    return <Link key={item.href} className={active?"active":undefined} aria-current={active?"page":undefined} href={item.href}>{item.label}</Link>;
+export default function SidebarNav({products}: {products: ProductNavItem[]}) {
+  const pathname = usePathname();
+  const productId = parseProductId(pathname);
+  const productItems: NavItem[] = productId
+    ? [
+        {href: `/products/${productId}`, label: "产品概览"},
+        {href: `/products/${productId}/opportunities`, label: "机会"},
+        {href: `/products/${productId}/conversations`, label: "对话"},
+        {href: `/products/${productId}/safety`, label: "安全"},
+      ]
+    : [];
+  const render = (item: NavItem) => {
+    const active = isNavActive(pathname, item.href);
+    return (
+      <Link
+        key={item.href}
+        className={active ? "active" : undefined}
+        aria-current={active ? "page" : undefined}
+        href={item.href}
+      >
+        {item.label}
+      </Link>
+    );
   };
-  return <aside className="side"><Link className="brand" href="/dashboard">Thread<span>Pilot</span></Link><nav className="side-nav" aria-label="主导航">{baseItems.map(render)}{productItems.length>0&&<><div className="nav-section">当前产品</div>{productItems.map(render)}</>}</nav><div className="side-footer"><span className="guard-dot"/>受保护影子模式</div></aside>;
+  return (
+    <aside className="side">
+      <Link className="brand" href="/dashboard">Thread<span>Pilot</span></Link>
+      <ProductSwitcher products={products} currentProductId={productId} />
+      <nav className="side-nav" aria-label="主导航">
+        {render({href: "/dashboard", label: "总览"})}
+        {productItems.length > 0 && (
+          <div className="product-context">
+            <div className="nav-section">产品工作区</div>
+            {productItems.map(render)}
+          </div>
+        )}
+      </nav>
+      <div className="side-footer"><span className="guard-dot" />受保护影子模式</div>
+    </aside>
+  );
 }

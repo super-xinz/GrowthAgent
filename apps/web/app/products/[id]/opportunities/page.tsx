@@ -1,16 +1,18 @@
-import Link from "next/link";
-import {getOpportunities} from "@/lib/api";
+import {notFound} from "next/navigation";
+import {getOpportunities, getProduct} from "@/lib/api";
 import {zhLabel} from "@/lib/labels";
 import OpportunityActions from "./OpportunityActions";
+import ProductBreadcrumbs from "../ProductBreadcrumbs";
 
 export default async function Opportunities({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
-  const rows=await getOpportunities(id);
+  const [rows, product]=await Promise.all([getOpportunities(id), getProduct(id)]);
+  if(!product)notFound();
   return <>
+    <ProductBreadcrumbs product={product} section="机会"/>
     <div className="eyebrow">对话机会雷达</div>
     <h1>机会列表</h1>
     <p>集中查看候选内容、用户意图、机会与风险评分、策略决策、回复草稿和影子发布状态。真实 Reddit API 尚未批准时，这里只展示本地测试或影子数据。</p>
-    <div className="actions"><Link className="button secondary" href={`/products/${id}`}>产品分析</Link><Link className="button secondary" href={`/products/${id}/safety`}>安全审计</Link></div>
     <div className="card"><table className="table"><thead><tr><th>对话内容</th><th>社区</th><th>用户意图</th><th>评分</th><th>策略与状态</th><th>回复草稿</th><th>本地操作</th></tr></thead><tbody>
       {rows.map((x:any)=><tr key={x.id}>
         <td><strong>{x.title||"评论"}</strong><br/><span className="label">{x.body.slice(0,150)}</span>{x.permalink&&<><br/><a href={x.permalink} target="_blank" rel="noreferrer">查看来源</a></>}</td>
