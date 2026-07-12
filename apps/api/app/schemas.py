@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -68,6 +69,23 @@ class ProductUpdate(BaseModel):
     do_not_recommend_when: list[str] | None = None
 
 
+class ProductOrderUpdate(BaseModel):
+    product_ids: list[str]
+
+
+class XiaohongshuSearchIn(BaseModel):
+    keyword: str = Field(min_length=1, max_length=100)
+    detail_limit: int = Field(default=3, ge=1, le=5)
+
+
+class XiaohongshuCommentBody(BaseModel):
+    body: str = Field(min_length=2, max_length=500)
+
+
+class XiaohongshuExecuteIn(XiaohongshuCommentBody):
+    token: str = Field(min_length=20, max_length=200)
+
+
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -84,6 +102,9 @@ class ProductOut(BaseModel):
     forbidden_claims: list
     recommend_when: list
     do_not_recommend_when: list
+    sort_order: int
+    deleted_at: datetime | None
+    purge_after: datetime | None
 
 
 class SourceOut(BaseModel):

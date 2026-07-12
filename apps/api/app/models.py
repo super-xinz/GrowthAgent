@@ -42,6 +42,9 @@ class Product(Base):
     forbidden_claims: Mapped[list] = mapped_column(JSON, default=list)
     recommend_when: Mapped[list] = mapped_column(JSON, default=list)
     do_not_recommend_when: Mapped[list] = mapped_column(JSON, default=list)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    purge_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     sources = relationship("ProductSource", cascade="all, delete-orphan")
@@ -154,6 +157,57 @@ class RedditContent(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     raw_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class XiaohongshuContent(Base):
+    __tablename__ = "xiaohongshu_contents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    dedupe_key: Mapped[str] = mapped_column(String(300), unique=True, index=True)
+    target_type: Mapped[str] = mapped_column(String(20))
+    platform_content_id: Mapped[str] = mapped_column(String(120), index=True)
+    parent_content_id: Mapped[str | None] = mapped_column(String(120), index=True)
+    xsec_token: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text, default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    author_id: Mapped[str] = mapped_column(String(120), default="")
+    author_name: Mapped[str] = mapped_column(String(200), default="")
+    source_keyword: Mapped[str] = mapped_column(String(300), default="")
+    raw_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class XiaohongshuOpportunity(Base):
+    __tablename__ = "xiaohongshu_opportunities"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    content_id: Mapped[str] = mapped_column(
+        ForeignKey("xiaohongshu_contents.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default="DISCOVERED")
+    opportunity_score: Mapped[float] = mapped_column(Float, default=0.5)
+    risk_score: Mapped[float] = mapped_column(Float, default=0.1)
+    commented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    content = relationship("XiaohongshuContent")
+    __table_args__ = (UniqueConstraint("product_id", "content_id"),)
+
+
+class XiaohongshuConfirmation(Base):
+    __tablename__ = "xiaohongshu_confirmations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    opportunity_id: Mapped[str] = mapped_column(
+        ForeignKey("xiaohongshu_opportunities.id", ondelete="CASCADE"), index=True
+    )
+    token: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    account_id: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(Text)
+    body_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class Candidate(Base):

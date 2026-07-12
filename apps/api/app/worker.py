@@ -1,5 +1,8 @@
 from celery import Celery
+import asyncio
 from .config import get_settings
+from .database import SessionLocal
+from .product_lifecycle import purge_expired_products as purge_expired
 
 settings = get_settings()
 celery_app = Celery(
@@ -11,12 +14,27 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     task_acks_late=True,
+    beat_schedule={
+        "purge-expired-products-hourly": {
+            "task": "purge_expired_products",
+            "schedule": 3600.0,
+        }
+    },
 )
 
 
 @celery_app.task(name="healthcheck")
 def healthcheck():
     return {"status": "ok", "mode": "shadow"}
+
+
+@celery_app.task(name="purge_expired_products")
+def purge_expired_products_task():
+    async def run():
+        async with SessionLocal() as session:
+            return await purge_expired(session)
+
+    return {"purged": asyncio.run(run())}
 
 
 PIPELINE_TASKS = [

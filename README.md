@@ -1,45 +1,33 @@
 # ThreadPilot
 
-ThreadPilot 是一个以证据、透明披露和安全策略为核心的 Reddit 增长智能体。它把产品网站或 GitHub 仓库转换成 Product Brain，再完成机会判断、回复草稿、影子发布、对话跟进、短链归因和安全审计。
+ThreadPilot 是一个面向小红书公开讨论的产品机会发现与人工确认评论工具。它读取产品网站或 GitHub 公开资料构建 Product Brain，搜索相关小红书笔记与公开评论，生成有依据的中文草稿，并在每次真实评论或回复前要求人工二次确认。
 
-Web 控制台已经中文化。真实 Reddit Data API 当前仍在申请审核中，因此项目默认只运行本地与影子模式，不会访问或发布真实 Reddit 内容。
+ThreadPilot 不发布笔记，不自动点赞或收藏，不批量评论，也没有自动发布模式。
 
-## 当前状态
+## 已实现能力
 
-| 能力 | 状态 | 说明 |
-| --- | --- | --- |
-| 中文 Web 控制台 | 已完成 | 动态导航高亮、产品分析、机会、对话、安全和漏斗页面 |
-| 网站 / GitHub 公开资料抓取 | 已完成 | 提取正文、去除导航脚本、保存内容哈希和来源 |
-| Product Brain | 已完成 | 严格 JSON Schema、自动修复重试、证据原文校验、版本管理 |
-| 本地机会与策略闭环 | 已完成 | Fixture、意图、评分、Policy Engine、回复、审计 |
-| 影子发布与对话状态机 | 已完成 | 幂等发布记录、追问分类、链接请求、停止条件 |
-| Tracking SDK 与事件归因 | 已完成 | 访问、注册、激活事件和 Dashboard 汇总 |
-| Reddit Data API 真实读取 | 等待批准 | `REDDIT_APP_APPROVAL_STATUS=API_APPLICATION_PENDING` |
-| Reddit OAuth Token Exchange | 尚未启用 | 获批并取得 Client ID/Secret 后接通 |
-| 真实 subreddit 搜索和规则同步 | 尚未启用 | 当前社区发现仅用于本地/影子验证 |
-| 真实评论发布 | 强制关闭 | 未获 Reddit 明确许可前不能开启 |
+- 中文产品管理：创建、切换、拖拽排序、回收站恢复，软删除内容 7 天后永久清理；
+- Product Brain：抓取公开网站/GitHub，保存来源证据、能力边界、目标用户和检索词；
+- 小红书扫码登录：Cookie 只保存在本地 `.xiaohongshu-data/`，不会写入数据库或日志；
+- 真实公开内容搜索：保存笔记 ID、评论 ID 和详情访问令牌，过滤非笔记占位项并抑制重复结果；
+- 笔记与评论机会：读取公开正文及评论，区分笔记评论和评论回复目标；
+- 中文草稿：禁止链接、虚假官方身份和未经确认的开发者身份；
+- 人工确认：确认令牌绑定目标、草稿哈希和当前小红书账号，10 分钟有效且只能使用一次；
+- 评论安全：每日产品上限、全局停止开关、写操作不自动重试；
+- 数据库迁移：API 启动时自动执行 Alembic，当前迁移版本为 `0005`。
 
 ## 技术栈
 
-- Next.js 15 + React 19；
-- FastAPI + SQLAlchemy Async；
-- PostgreSQL 16 + pgvector；
-- Redis + Celery；
+- Next.js 15、React 19、TypeScript；
+- FastAPI、SQLAlchemy Async、Alembic；
+- PostgreSQL 16、Redis、Celery；
 - Docker Compose；
-- OpenAI-compatible LLM Provider；
-- Pytest、pytest-asyncio 与 TypeScript 类型检查。
+- OpenAI-compatible LLM；
+- 本地 `xiaohongshu-mcp` 服务与 CloakBrowser。
 
 ## 快速启动
 
-### 1. 环境要求
-
-推荐只安装 Docker Desktop。macOS 通常已经包含 `make`。
-
-- Docker Desktop：https://www.docker.com/products/docker-desktop/
-- Git：用于版本管理；
-- Make：用于简化常用命令。
-
-### 2. 创建本地配置
+需要 macOS Apple Silicon 和 Docker Desktop。
 
 ```bash
 git clone https://github.com/super-xinz/ThreadPilot.git
@@ -47,19 +35,27 @@ cd ThreadPilot
 cp .env.example .env
 ```
 
-`.env` 已被 `.gitignore` 排除，禁止将真实 API Key、OAuth Secret 或 Token 提交到 GitHub。
+在 `.env` 中配置大模型：
 
-### 3. 启动全部服务
+```dotenv
+LLM_PROVIDER=openai
+LLM_API_KEY=你的密钥
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_STRONG_MODEL=接口实际支持的模型名
+```
+
+启动全部服务：
 
 ```bash
 make dev
 ```
 
-第一次启动会下载基础镜像并安装依赖。完成后访问：
+首次构建小红书 MCP 时会下载约 200MB 的浏览器运行文件。完成后访问：
 
-- 中文控制台：http://localhost:3000
+- 控制台：http://localhost:3000/dashboard
+- 小红书账号：http://localhost:3000/account
 - API 文档：http://localhost:8000/docs
-- API 健康检查：http://localhost:8000/health
+- MCP 健康检查：http://localhost:18060/health
 
 停止服务：
 
@@ -67,211 +63,79 @@ make dev
 make down
 ```
 
-## 大模型配置
+## 第一次使用
 
-默认配置使用 `mock`，无需外部 Key，但只适合测试流程。
+1. 打开 `/account`，使用小红书 App 扫码登录；
+2. 在 `/products/new` 添加产品网站或 GitHub 地址；
+3. 检查 Product Brain 的来源证据、目标用户和能力边界；
+4. 在产品概览输入关键词，点击“搜索小红书机会”；
+5. 在机会页查看公开笔记和评论，点击“生成草稿”；
+6. 编辑草稿，点击“检查并确认”；
+7. 在弹窗中核对目标与完整文案；
+8. 只有点击“确认并发布评论”才会向小红书执行一次评论或回复。
 
-要获得真实产品分析，在 `.env` 中配置 OpenAI 或兼容接口：
+任何草稿变化都会使已有确认失效。切换小红书账号、令牌过期、重复使用令牌、达到每日上限或开启全局停止开关时，执行端点都会拒绝发布。
 
-```dotenv
-LLM_PROVIDER=openai
-LLM_API_KEY=你的密钥
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_STRONG_MODEL=你实际可用的模型名称
-LLM_CHEAP_MODEL=
-EMBEDDING_MODEL=
-```
+## 页面
 
-修改后重新创建服务：
+- `/dashboard`：产品总览、排序和回收站；
+- `/account`：扫码登录、账号状态和重新登录；
+- `/products/new`：创建产品并分析公开资料；
+- `/products/{id}`：Product Brain、搜索入口和产品设置；
+- `/products/{id}/opportunities`：笔记/评论机会、草稿编辑和最终确认；
+- `/products/{id}/conversations`：已执行互动的后续状态；
+- `/products/{id}/safety`：账号状态、安全边界和操作记录。
 
-```bash
-docker compose up -d --force-recreate api worker
-```
-
-Product Brain 会要求模型完整返回：
-
-- 产品定位与品类；
-- 目标用户；
-- Jobs to be done；
-- 痛点与使用场景；
-- 推荐和禁止推荐边界；
-- 带 `source_id`、原文引用和置信度的能力声明；
-- 不确定信息；
-- 高意向检索图谱。
-
-缺字段或证据引用不真实时，系统会自动要求模型修复；再次失败则把产品标记为 `ANALYSIS_FAILED`，不会伪装为分析成功。
-
-## 第一次本地体验
-
-1. 打开 http://localhost:3000/products/new；
-2. 输入产品名称，以及公开网站或 GitHub 仓库地址；
-3. 系统抓取公开资料并构建 Product Brain；
-4. 进入产品分析页检查目标用户、痛点、证据声明和不推荐边界；
-5. 使用本地 Fixture 验证机会与对话闭环。
-
-建议明确指定产品 ID，避免 Fixture 导入到其他产品：
-
-```bash
-make seed PRODUCT_ID=你的产品ID
-```
-
-产品 ID 可以从产品页面 URL 中取得：
+## 核心 API
 
 ```text
-/products/{产品ID}
+GET    /v1/xiaohongshu/status
+GET    /v1/xiaohongshu/login/qrcode
+GET    /v1/xiaohongshu/account
+DELETE /v1/xiaohongshu/login
+
+POST   /v1/products
+PUT    /v1/products/order
+DELETE /v1/products/{id}
+POST   /v1/products/{id}/restore
+DELETE /v1/products/{id}/permanent
+
+POST   /v1/products/{id}/xiaohongshu/search
+GET    /v1/products/{id}/opportunities
+POST   /v1/xiaohongshu/opportunities/{id}/draft
+POST   /v1/xiaohongshu/opportunities/{id}/confirm
+POST   /v1/xiaohongshu/opportunities/{id}/execute
 ```
 
-Fixture 导入会完成：
+`execute` 是唯一会产生小红书外部写操作的端点。它必须收到由 `confirm` 返回的一次性令牌和完全一致的草稿正文。
 
-- 创建本地 Reddit 测试内容；
-- 建立候选机会；
-- 运行意图分类和机会评分；
-- 运行 Policy Engine；
-- 生成透明回复草稿；
-- 写入策略审计。
-
-## 页面说明
-
-- `/dashboard`：扫描、机会、对话、访问、注册、激活与风险总览；
-- `/products/new`：产品接入与自动分析；
-- `/products/{id}`：完整 Product Brain、证据、推荐边界和 Tracking SDK；
-- `/products/{id}/opportunities`：候选内容、意图、机会/风险分、策略和回复草稿；
-- `/products/{id}/conversations`：对话、追问、链接请求、转化和关闭状态；
-- `/products/{id}/safety`：社区状态、风险事件和策略审计。
-
-侧边栏根据当前 URL 和产品 ID 动态生成。只有当前页面对应的入口会高亮，产品子页面不会再错误高亮“总览”。
-
-## Reddit API 申请阶段
-
-Reddit Responsible Builder Policy 要求先申请并获得明确批准。申请等待期间使用：
-
-```dotenv
-REDDIT_CLIENT_ID=
-REDDIT_CLIENT_SECRET=
-REDDIT_REDIRECT_URI=http://localhost:8000/v1/reddit/oauth/callback
-REDDIT_USER_AGENT=macos:threadpilot:v0.1 (by /u/你的专用账号)
-REDDIT_APP_APPROVAL_STATUS=API_APPLICATION_PENDING
-AUTOPUBLISH_ENABLED=false
-GLOBAL_KILL_SWITCH=false
-```
-
-申请入口：
-
-https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164
-
-源码地址：
-
-https://github.com/super-xinz/ThreadPilot
-
-批准非商业访问后，才能根据 Reddit 的实际批准范围修改：
-
-```dotenv
-REDDIT_APP_APPROVAL_STATUS=API_APPROVED_NON_COMMERCIAL
-```
-
-不能自行填写 `COMMERCIAL_APPROVED`。真实发布开关也不能因为取得 Client ID 就直接打开。
-
-## 发布安全边界
-
-项目默认不会向 Reddit 发布评论。当前发布端点只会生成 `SHADOW_RECORDED` 或本地模拟记录。
-
-任何真实发布实现都必须同时满足：
-
-```text
-环境 AUTOPUBLISH_ENABLED=true
-产品 autopublish_enabled=true
-Reddit 明确批准对应用途
-专用 Reddit 账号 ACTIVE
-社区规则明确允许
-策略决策 ALLOW_AUTOREPLY
-账号和社区配额充足
-GLOBAL_KILL_SWITCH=false
-```
-
-项目明确禁止：
-
-- 多账号矩阵和账号轮换；
-- 自动点赞、点踩或操纵 Karma；
-- 自动私信陌生用户；
-- 重复或近似模板跨社区发布；
-- 浏览器模拟登录和绕过 CAPTCHA；
-- 规避限流、封禁、用户屏蔽或 Moderator 决定；
-- 用 Reddit 数据训练或微调模型；
-- 推断 Redditor 的敏感属性。
-
-## 验证与测试
-
-运行全部后端测试：
+## 测试
 
 ```bash
 make test
-```
-
-当前测试共 10 项，包含一条完整受保护 API 闭环：
-
-```text
-创建产品
-→ 构建并严格校验 Product Brain
-→ 社区状态与规则
-→ 创建机会
-→ 策略决策
-→ 回复生成
-→ 幂等影子发布
-→ 对话和链接请求
-→ 短链跳转
-→ 注册/激活事件
-→ Analytics、风险和审计
-→ Reddit 账号 CRUD
-→ 产品启停和安全开关入口
-```
-
-前端类型检查：
-
-```bash
-make typecheck
-```
-
-常规代码检查：
-
-```bash
 make lint
+make typecheck
+make build
 ```
 
-## API 主流程
+验证范围包括 Product Brain、产品生命周期、MCP 客户端、真实响应规范化、搜索去重、笔记/评论机会、草稿质量、目标/账号/草稿绑定、一次性确认、过期与每日上限、前端导航及生产构建。
+
+## 数据与安全
+
+- `.env`、`.xiaohongshu-data/`、数据库卷和 Celery 状态文件不会进入 Git；
+- 不读取浏览器 Cookie 文件内容，不在 API 响应或日志中输出 Cookie；
+- 不发布小红书笔记、图片或视频；
+- 不自动点赞、收藏、关注、私信或批量互动；
+- 评论/回复写操作不做网络重试，避免响应丢失时重复发布；
+- 请只将它用于你有权运营的账号，并自行遵守小红书平台规则和适用法律。
+
+## 项目结构
 
 ```text
-POST /v1/products
-POST /v1/products/{id}/ingest
-POST /v1/products/{id}/build-brain
-GET  /v1/products/{id}/brain
-POST /v1/products/{id}/discover-subreddits
-GET  /v1/products/{id}/opportunities
-GET  /v1/opportunities/{candidate_id}/decision
-GET  /v1/opportunities/{candidate_id}/generated-reply
-POST /v1/opportunities/{candidate_id}/publish
-POST /v1/conversations/{conversation_id}/followup
-GET  /c/{short_code}
-POST /v1/events
-GET  /v1/products/{id}/analytics/overview
-GET  /v1/products/{id}/risk-events
-GET  /v1/products/{id}/audit-log
+apps/api       FastAPI、任务与数据库迁移
+apps/web       中文 Next.js 控制台
+tests          后端与工作流测试
+infra/docker   API/Web 镜像
+可以参考的开源项目/xiaohongshu-mcp-main
+               本地小红书 MCP 服务
 ```
-
-## 数据与隐私
-
-- `.env`、本地数据库、缓存和依赖目录不会进入 Git；
-- Reddit API 获批前不读取真实 Reddit 数据；
-- 真实接入后必须同步删除或移除状态，及时清理已删除内容；
-- Token 必须加密保存，日志不得输出 Client Secret、Access Token 或 Refresh Token；
-- Tracking SDK 仅接收项目定义的访问、注册和激活事件，不应收集敏感个人信息。
-
-## 已知外部阻塞
-
-以下能力不能通过本地代码自行解锁：
-
-1. Reddit Data API 访问批准；
-2. OAuth Client ID 与 Client Secret；
-3. Reddit 明确允许的读取和发布 scope；
-4. 各 subreddit 的真实规则和 Moderator 决定。
-
-收到 Reddit 批准后，下一步是实现并验证 OAuth Token Exchange、加密 Token 存储、只读内容同步、删除同步和真实社区规则刷新；在这些环节全部通过前，真实发布保持关闭。

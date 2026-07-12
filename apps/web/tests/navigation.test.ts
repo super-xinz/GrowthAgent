@@ -4,8 +4,10 @@ import {
   buildBreadcrumbs,
   filterProducts,
   isNavActive,
+  moveProduct,
   parseProductId,
   summarizeProducts,
+  retentionDays,
 } from "../lib/navigation.ts";
 
 const products = [
@@ -18,6 +20,20 @@ test("parses a real product id but excludes the new route", () => {
   assert.equal(parseProductId("/products/alpha/opportunities"), "alpha");
   assert.equal(parseProductId("/products/new"), null);
   assert.equal(parseProductId("/dashboard"), null);
+});
+
+test("moves a product without mutating the source order", () => {
+  const ids = ["a", "b", "c"];
+  assert.deepEqual(moveProduct(ids, 0, 2), ["b", "c", "a"]);
+  assert.deepEqual(ids, ["a", "b", "c"]);
+  assert.deepEqual(moveProduct(ids, -1, 2), ids);
+  assert.deepEqual(moveProduct(ids, 1, 9), ids);
+});
+
+test("rounds remaining retention up to whole days", () => {
+  const now = new Date("2026-07-12T00:00:00Z");
+  assert.equal(retentionDays("2026-07-18T12:00:00Z", now), 7);
+  assert.equal(retentionDays("2026-07-11T00:00:00Z", now), 0);
 });
 
 test("builds location breadcrumbs for product sections", () => {

@@ -4,8 +4,8 @@ import {getProducts} from "@/lib/api";
 import SidebarNav from "./SidebarNav";
 
 export const metadata = {
-  title: "ThreadPilot｜Reddit 增长智能体",
-  description: "以证据和安全策略为核心的 Reddit 机会分析工具",
+  title: "ThreadPilot｜小红书评论增长助手",
+  description: "发现小红书真实需求，生成有依据的评论，并在人工确认后执行",
 };
 
 export default async function Layout({children}: {children: React.ReactNode}) {

@@ -22,7 +22,24 @@ export const getProduct=(id:string)=>apiJson(`/v1/products/${id}`,{allow404:true
 export const getBrain=(id:string)=>apiJson(`/v1/products/${id}/brain`,{allow404:true});
 export const getOpportunities=(id:string)=>apiJson(`/v1/products/${id}/opportunities`);
 export const getAnalytics=(id:string)=>apiJson(`/v1/products/${id}/analytics/overview`);
-export const getSubreddits=(id:string)=>apiJson(`/v1/products/${id}/subreddits`);
 export const getConversations=(id:string)=>apiJson(`/v1/products/${id}/conversations`);
 export const getRiskEvents=(id:string)=>apiJson(`/v1/products/${id}/risk-events`);
 export const getAuditLog=(id:string)=>apiJson(`/v1/products/${id}/audit-log`);
+export const getTrashedProducts=()=>apiJson("/v1/products/trash");
+
+async function mutateJson(path:string,method:string,body?:unknown){
+  const response=await fetch(`${API}${path}`,{
+    method,
+    headers:body?{"Content-Type":"application/json"}:undefined,
+    body:body?JSON.stringify(body):undefined,
+  });
+  if(!response.ok)throw new Error(await responseDetail(response));
+  return response.json();
+}
+
+export const reorderProducts=(productIds:string[])=>mutateJson("/v1/products/order","PUT",{product_ids:productIds});
+export const trashProduct=(id:string)=>mutateJson(`/v1/products/${id}`,"DELETE");
+export const restoreProduct=(id:string)=>mutateJson(`/v1/products/${id}/restore`,"POST");
+export const permanentlyDeleteProduct=(id:string)=>mutateJson(`/v1/products/${id}/permanent`,"DELETE");
+export const getXiaohongshuStatus=()=>apiJson("/v1/xiaohongshu/status");
+export const getXiaohongshuQrcode=()=>apiJson("/v1/xiaohongshu/login/qrcode");

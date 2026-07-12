@@ -47,6 +47,7 @@ async def test_complete_guarded_workflow(api_client):
         },
     )
     assert created.status_code == 201
+    assert created.json()["disclosure_template"] == ""
     product_id = created.json()["id"]
 
     content = (

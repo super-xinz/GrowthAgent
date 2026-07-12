@@ -1,5 +1,5 @@
 import {notFound} from "next/navigation";
-import {getAnalytics,getBrain,getProduct,getSubreddits} from "@/lib/api";
+import {getAnalytics,getBrain,getProduct} from "@/lib/api";
 import {zhLabel} from "@/lib/labels";
 import RebuildBrainButton from "./RebuildBrainButton";
 import ProductModeControls from "./ProductModeControls";
@@ -10,7 +10,7 @@ function Items({items}:{items?:string[]}){return items?.length?<ul>{items.map((i
 
 export default async function ProductPage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
-  const [p,brain,a,subs]=await Promise.all([getProduct(id),getBrain(id),getAnalytics(id),getSubreddits(id)]);
+  const [p,brain,a]=await Promise.all([getProduct(id),getBrain(id),getAnalytics(id)]);
   if(!p)notFound();
   const b=brain?.brain||{};
   return <>
@@ -20,14 +20,14 @@ export default async function ProductPage({params}:{params:Promise<{id:string}>}
     <p>{b.one_liner||"Product Brain 尚未构建。"}</p>
     <div className="actions">
       <RebuildBrainButton productId={id}/>
-      <ProductModeControls productId={id} status={p.status}/>
+      <ProductModeControls productId={id} status={p.status} productName={p.name}/>
     </div>
     <section className="grid">
       <div className="card"><div className="label">产品状态</div><div className="metric" style={{fontSize:20}}>{zhLabel(p.status)}</div></div>
       <div className="card"><div className="label">自动发布</div><div className="metric" style={{fontSize:20}}>{p.autopublish_enabled?"产品侧已开启":"产品侧已关闭"}</div></div>
       <div className="card"><div className="label">每日回复上限</div><div className="metric">{p.daily_reply_limit}</div></div>
-      <div className="card"><div className="label">候选社区</div><div className="metric">{subs.length}</div></div>
-      <div className="card wide"><div className="label">Product Brain</div><h2>{b.category||"尚未识别品类"}</h2><p><strong>关系披露：</strong> {p.disclosure_template||b.disclosure_identity||"未设置"}</p><p><strong>价格信息：</strong> {b.pricing_summary||"尚未验证"}</p><p><strong>目标用户：</strong> {(b.target_users||[]).join("、")||"未设置"}</p></div>
+      <div className="card"><div className="label">发现机会</div><div className="metric">{a?.qualified_opportunities??0}</div></div>
+      <div className="card wide"><div className="label">Product Brain</div><h2>{b.category||"尚未识别品类"}</h2><p><strong>关系说明：</strong> {p.disclosure_template||"未设置，请按真实情况填写"}</p><p><strong>价格信息：</strong> {b.pricing_summary||"尚未验证"}</p><p><strong>目标用户：</strong> {(b.target_users||[]).join("、")||"未设置"}</p></div>
       <div className="card wide"><div className="label">用户要完成的任务</div><Items items={b.jobs_to_be_done}/></div>
       <div className="card wide"><div className="label">核心痛点</div><Items items={b.pain_points}/></div>
       <div className="card wide"><div className="label">使用场景</div><Items items={b.use_cases}/></div>

@@ -15,7 +15,7 @@ export default function SidebarNav({products}: {products: ProductNavItem[]}) {
         {href: `/products/${productId}`, label: "产品概览"},
         {href: `/products/${productId}/opportunities`, label: "机会"},
         {href: `/products/${productId}/conversations`, label: "对话"},
-        {href: `/products/${productId}/safety`, label: "安全"},
+        {href: `/products/${productId}/safety`, label: "操作记录"},
       ]
     : [];
   const render = (item: NavItem) => {
@@ -37,6 +37,7 @@ export default function SidebarNav({products}: {products: ProductNavItem[]}) {
       <ProductSwitcher products={products} currentProductId={productId} />
       <nav className="side-nav" aria-label="主导航">
         {render({href: "/dashboard", label: "总览"})}
+        {render({href: "/account", label: "小红书账号"})}
         {productItems.length > 0 && (
           <div className="product-context">
             <div className="nav-section">产品工作区</div>
@@ -44,7 +45,7 @@ export default function SidebarNav({products}: {products: ProductNavItem[]}) {
           </div>
         )}
       </nav>
-      <div className="side-footer"><span className="guard-dot" />受保护影子模式</div>
+      <div className="side-footer"><span className="guard-dot" />人工确认后评论</div>
     </aside>
   );
 }

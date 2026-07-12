@@ -60,7 +60,7 @@ class MockLLMProvider(LLMProvider):
             "supported_claims": claims,
             "unsupported_or_uncertain_claims": [],
             "pricing_summary": "Not verified",
-            "disclosure_identity": f"I'm building {name}",
+            "disclosure_identity": "Relationship to the product has not been verified",
             "query_graph": {
                 "direct_terms": common[:5],
                 "pain_phrases": [f"looking for {w}" for w in common[:4]],

@@ -15,6 +15,23 @@ services:
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+  xiaohongshu-mcp:
+    build:
+      context: ./可以参考的开源项目/xiaohongshu-mcp-main
+      dockerfile: Dockerfile.arm64
+    image: threadpilot-xiaohongshu-mcp:local
+    restart: unless-stopped
+    init: true
+    tty: true
+    environment:
+      ROD_BROWSER_BIN: /usr/local/bin/cloak-chromium
+      COOKIES_PATH: /app/data/cookies.json
+      HOME: /app/data/home
+      XDG_CACHE_HOME: /app/data/cache
+      XDG_CONFIG_HOME: /app/data/config
+    ports: ["18060:18060"]
+    volumes:
+      - ./.xiaohongshu-data:/app/data
   api:
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
     env_file: .env
@@ -23,9 +40,10 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
+      xiaohongshu-mcp: {condition: service_started}
   worker:
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
-    command: celery -A app.worker.celery_app worker --loglevel=INFO
+    command: celery -A app.worker.celery_app worker -B --loglevel=INFO
     env_file: .env
     volumes: [./apps/api:/app/apps/api, ./packages:/app/packages]
     depends_on: [postgres, redis]

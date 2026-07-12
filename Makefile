@@ -1,4 +1,4 @@
-.PHONY: dev down test lint typecheck migrate seed
+.PHONY: dev down test lint typecheck build migrate
 dev:
 	docker compose up --build
 down:
@@ -10,7 +10,7 @@ lint:
 	docker compose run --rm web npm run lint
 typecheck:
 	docker compose run --rm web npm run typecheck
+build:
+	docker compose build web
 migrate:
 	docker compose run --rm api alembic upgrade head
-seed:
-	docker compose run --rm api python -m app.fixtures ../../tests/fixtures/reddit.json $(PRODUCT_ID)

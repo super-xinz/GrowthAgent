@@ -5,7 +5,9 @@ export type ProductNavItem = {
   website_url?: string | null;
   github_url?: string | null;
   daily_reply_limit?: number;
-  subreddits?: unknown[];
+  sort_order?: number;
+  deleted_at?: string | null;
+  purge_after?: string | null;
 };
 
 export function parseProductId(pathname: string) {
@@ -50,4 +52,18 @@ export function buildBreadcrumbs(
     },
     {label: section, href: null},
   ];
+}
+
+export function moveProduct<T>(items: T[], from: number, to: number) {
+  if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) {
+    return items.slice();
+  }
+  const reordered = items.slice();
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+  return reordered;
+}
+
+export function retentionDays(purgeAfter: string, now = new Date()) {
+  return Math.max(0, Math.ceil((new Date(purgeAfter).getTime() - now.getTime()) / 86_400_000));
 }

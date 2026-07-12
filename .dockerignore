@@ -1,0 +1,15 @@
+.git
+.env
+.DS_Store
+.xiaohongshu-data
+.pnpm-store
+**/.next
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.pyc
+celerybeat-schedule*
+docs
+reddit_autonomous_growth_agent_mvp.md
+可以参考的开源项目

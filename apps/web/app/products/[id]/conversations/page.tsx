@@ -12,10 +12,10 @@ export default async function Conversations({params}:{params:Promise<{id:string}
     <ProductBreadcrumbs product={product} section="对话"/>
     <div className="eyebrow">持续对话状态机</div>
     <h1>对话跟进</h1>
-    <p>影子发布或模拟发布会创建对话记录，用于跟踪追问意图、链接请求、转化状态、下次检查时间和停止原因。</p>
+    <p>保存模拟记录后会创建一条测试对话，用于验证追问意图、链接请求、转化状态、下次检查时间和停止条件，不会联系真实用户。</p>
     <div className="card"><table className="table"><thead><tr><th>对话状态</th><th>转化状态</th><th>跟进次数</th><th>最后活动</th><th>下次检查</th><th>关闭原因</th><th>本地测试操作</th></tr></thead><tbody>
       {rows.map((x:any)=><tr key={x.id}><td><span className="status">{zhLabel(x.state)}</span></td><td>{zhLabel(x.conversion_state,"无")}</td><td>{x.followup_count}</td><td>{new Date(x.last_activity_at).toLocaleString("zh-CN")}</td><td>{x.next_check_at?new Date(x.next_check_at).toLocaleString("zh-CN"):"—"}</td><td>{zhLabel(x.closed_reason,"—")}</td><td><ConversationActions conversationId={x.id} closed={x.state==="CLOSED"}/></td></tr>)}
-      {!rows.length&&<tr><td className="empty" colSpan={7}>暂无对话。先在机会页写入影子发布记录，系统才会建立对话。</td></tr>}
+      {!rows.length&&<tr><td className="empty" colSpan={7}>暂无对话。先在机会页保存一条模拟记录，系统才会建立测试对话。</td></tr>}
     </tbody></table></div>
   </>;
 }

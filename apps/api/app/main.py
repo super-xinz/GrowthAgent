@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 import logging
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
@@ -7,10 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from .config import get_settings
-from .database import engine, get_db
+from .database import get_db
 from .ingestion import ingest_url
 from .models import (
-    Base,
     Candidate,
     Conversation,
     GeneratedReply,
@@ -25,6 +24,7 @@ from .models import (
     Subreddit,
     TrackingEvent,
     TrackingLink,
+    XiaohongshuOpportunity,
 )
 from .providers import provider_for
 from .schemas import (
@@ -36,6 +36,7 @@ from .schemas import (
     OpportunityOut,
     ProductCreate,
     ProductOut,
+    ProductOrderUpdate,
     ProductSubredditPatch,
     ProductUpdate,
     ProductBrainData,
@@ -45,6 +46,9 @@ from .schemas import (
     SourceOut,
     SubredditOut,
     TrackingEventIn,
+    XiaohongshuCommentBody,
+    XiaohongshuExecuteIn,
+    XiaohongshuSearchIn,
 )
 from .services import (
     add_followup,
@@ -55,21 +59,20 @@ from .services import (
     record_event,
     run_policy,
 )
+from .xiaohongshu_client import XiaohongshuClient, XiaohongshuError
+from .xiaohongshu_service import (
+    ConfirmationError,
+    consume_confirmation,
+    create_confirmation,
+    ensure_daily_quota,
+    generate_xiaohongshu_draft,
+    import_search_opportunities,
+)
 
 logger = logging.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # A fresh local Docker volume must be usable after `make dev` without a
-    # separate, easy-to-miss migration command. Production still uses Alembic.
-    if get_settings().app_env == "development":
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    yield
-
-
-app = FastAPI(title="Reddit Growth Agent API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="ThreadPilot Xiaohongshu Growth API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -90,15 +93,187 @@ async def health():
     }
 
 
+async def xhs_call(method: str):
+    client = XiaohongshuClient()
+    try:
+        return await getattr(client, method)()
+    except XiaohongshuError as error:
+        raise HTTPException(503, str(error)) from error
+    finally:
+        await client.close()
+
+
+@app.get("/v1/xiaohongshu/status")
+async def xiaohongshu_status():
+    return await xhs_call("login_status")
+
+
+@app.get("/v1/xiaohongshu/login/qrcode")
+async def xiaohongshu_qrcode():
+    return await xhs_call("login_qrcode")
+
+
+@app.get("/v1/xiaohongshu/account")
+async def xiaohongshu_account():
+    return await xhs_call("me")
+
+
+@app.delete("/v1/xiaohongshu/login")
+async def xiaohongshu_logout():
+    return await xhs_call("reset_login")
+
+
+@app.post("/v1/products/{product_id}/xiaohongshu/search", response_model=list[OpportunityOut])
+async def search_xiaohongshu(
+    product_id: str, body: XiaohongshuSearchIn, db: AsyncSession = Depends(get_db)
+):
+    await get_product(product_id, db)
+    client = XiaohongshuClient()
+    try:
+        await import_search_opportunities(
+            db, product_id, client, body.keyword.strip(), detail_limit=body.detail_limit
+        )
+    except XiaohongshuError as error:
+        raise HTTPException(503, str(error)) from error
+    finally:
+        await client.close()
+    rows = list(
+        (
+            await db.scalars(
+                select(XiaohongshuOpportunity)
+                .options(selectinload(XiaohongshuOpportunity.content))
+                .where(XiaohongshuOpportunity.product_id == product_id)
+                .order_by(XiaohongshuOpportunity.opportunity_score.desc())
+            )
+        ).all()
+    )
+    return [xiaohongshu_opportunity_out(row) for row in rows]
+
+
+async def get_xiaohongshu_opportunity(opportunity_id: str, db: AsyncSession):
+    row = await db.scalar(
+        select(XiaohongshuOpportunity)
+        .options(selectinload(XiaohongshuOpportunity.content))
+        .where(XiaohongshuOpportunity.id == opportunity_id)
+    )
+    if row is None:
+        raise HTTPException(404, "未找到小红书评论机会")
+    return row
+
+
+@app.post("/v1/xiaohongshu/opportunities/{opportunity_id}/draft")
+async def draft_xiaohongshu_comment(
+    opportunity_id: str, db: AsyncSession = Depends(get_db)
+):
+    row = await get_xiaohongshu_opportunity(opportunity_id, db)
+    try:
+        body = await generate_xiaohongshu_draft(db, row, provider_for(get_settings()))
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(503, f"生成评论草稿失败：{error}") from error
+    return {"body": body}
+
+
+@app.post("/v1/xiaohongshu/opportunities/{opportunity_id}/confirm")
+async def confirm_xiaohongshu_comment(
+    opportunity_id: str,
+    body: XiaohongshuCommentBody,
+    db: AsyncSession = Depends(get_db),
+):
+    await get_xiaohongshu_opportunity(opportunity_id, db)
+    client = XiaohongshuClient()
+    try:
+        status = await client.login_status()
+        if not status.get("is_logged_in"):
+            raise HTTPException(409, "小红书账号未登录")
+        profile = await client.me()
+    except XiaohongshuError as error:
+        raise HTTPException(503, str(error)) from error
+    finally:
+        await client.close()
+    profile_data = profile.get("data") or profile
+    account_id = str((profile_data.get("userBasicInfo") or {}).get("redId") or "")
+    if not account_id:
+        raise HTTPException(503, "无法识别当前小红书账号")
+    confirmation = await create_confirmation(
+        db, opportunity_id, body.body, account_id=account_id
+    )
+    return {"token": confirmation.token, "expires_at": confirmation.expires_at}
+
+
+@app.post("/v1/xiaohongshu/opportunities/{opportunity_id}/execute")
+async def execute_xiaohongshu_comment(
+    opportunity_id: str,
+    body: XiaohongshuExecuteIn,
+    db: AsyncSession = Depends(get_db),
+):
+    row = await get_xiaohongshu_opportunity(opportunity_id, db)
+    settings = get_settings()
+    if settings.global_kill_switch:
+        raise HTTPException(409, "全局停止开关已开启")
+    product = await get_product(row.product_id, db)
+    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    comments_today = await db.scalar(
+        select(func.count(XiaohongshuOpportunity.id)).where(
+            XiaohongshuOpportunity.product_id == row.product_id,
+            XiaohongshuOpportunity.commented_at >= day_start,
+        )
+    )
+    try:
+        ensure_daily_quota(comments_today or 0, product.daily_reply_limit)
+    except ConfirmationError as error:
+        raise HTTPException(429, str(error)) from error
+    client = XiaohongshuClient()
+    try:
+        status = await client.login_status()
+        if not status.get("is_logged_in"):
+            raise HTTPException(409, "小红书账号未登录")
+        profile = await client.me()
+        profile_data = profile.get("data") or profile
+        account_id = str((profile_data.get("userBasicInfo") or {}).get("redId") or "")
+        await consume_confirmation(
+            db,
+            body.token,
+            body.body,
+            opportunity_id=opportunity_id,
+            account_id=account_id,
+        )
+        content = row.content
+        if content.target_type == "COMMENT":
+            result = await client.reply(
+                content.parent_content_id,
+                content.xsec_token,
+                body.body,
+                comment_id=content.platform_content_id,
+            )
+        else:
+            result = await client.comment(
+                content.platform_content_id, content.xsec_token, body.body
+            )
+    except ConfirmationError as error:
+        raise HTTPException(409, str(error)) from error
+    except XiaohongshuError as error:
+        raise HTTPException(503, str(error)) from error
+    finally:
+        await client.close()
+    row.status = "COMMENTED"
+    row.commented_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"status": "COMMENTED", "result": result}
+
+
 @app.post("/v1/products", response_model=ProductOut, status_code=201)
 async def create_product(body: ProductCreate, db: AsyncSession = Depends(get_db)):
     settings = get_settings()
+    max_order = await db.scalar(
+        select(func.max(Product.sort_order)).where(Product.deleted_at.is_(None))
+    )
     product = Product(
         name=body.name,
         website_url=str(body.website_url) if body.website_url else None,
         github_url=str(body.github_url) if body.github_url else None,
         daily_reply_limit=min(body.daily_reply_limit, settings.max_daily_reply_limit),
-        disclosure_template=f"I'm building {body.name}",
+        disclosure_template="",
+        sort_order=(max_order if max_order is not None else -1) + 1,
     )
     db.add(product)
     await db.commit()
@@ -108,14 +283,94 @@ async def create_product(body: ProductCreate, db: AsyncSession = Depends(get_db)
 
 @app.get("/v1/products", response_model=list[ProductOut])
 async def products(db: AsyncSession = Depends(get_db)):
-    return list((await db.scalars(select(Product).order_by(Product.created_at.desc()))).all())
+    return list(
+        (
+            await db.scalars(
+                select(Product)
+                .where(Product.deleted_at.is_(None))
+                .order_by(Product.sort_order, Product.created_at)
+            )
+        ).all()
+    )
+
+
+@app.get("/v1/products/trash", response_model=list[ProductOut])
+async def trashed_products(db: AsyncSession = Depends(get_db)):
+    return list(
+        (
+            await db.scalars(
+                select(Product)
+                .where(Product.deleted_at.is_not(None))
+                .order_by(Product.deleted_at.desc())
+            )
+        ).all()
+    )
+
+
+@app.put("/v1/products/order", response_model=list[ProductOut])
+async def reorder_products(body: ProductOrderUpdate, db: AsyncSession = Depends(get_db)):
+    active = list(
+        (
+            await db.scalars(select(Product).where(Product.deleted_at.is_(None)).with_for_update())
+        ).all()
+    )
+    if len(body.product_ids) != len(set(body.product_ids)) or set(body.product_ids) != {
+        product.id for product in active
+    }:
+        raise HTTPException(409, "产品列表已发生变化，请刷新后重试")
+    by_id = {product.id: product for product in active}
+    for position, product_id in enumerate(body.product_ids):
+        by_id[product_id].sort_order = position
+    await db.commit()
+    return [by_id[product_id] for product_id in body.product_ids]
 
 
 async def get_product(product_id: str, db: AsyncSession):
     product = await db.get(Product, product_id)
-    if not product:
+    if not product or product.deleted_at is not None:
         raise HTTPException(404, "Product not found")
     return product
+
+
+@app.delete("/v1/products/{product_id}", response_model=ProductOut)
+async def delete_product(product_id: str, db: AsyncSession = Depends(get_db)):
+    product = await get_product(product_id, db)
+    deleted_at = datetime.now(timezone.utc)
+    product.deleted_at = deleted_at
+    product.purge_after = deleted_at + timedelta(days=7)
+    product.status = "PAUSED"
+    product.autopublish_enabled = False
+    await db.commit()
+    await db.refresh(product)
+    return product
+
+
+@app.post("/v1/products/{product_id}/restore", response_model=ProductOut)
+async def restore_product(product_id: str, db: AsyncSession = Depends(get_db)):
+    product = await db.get(Product, product_id)
+    if not product or product.deleted_at is None:
+        raise HTTPException(404, "回收站中未找到该产品")
+    max_order = await db.scalar(
+        select(func.max(Product.sort_order)).where(Product.deleted_at.is_(None))
+    )
+    product.deleted_at = None
+    product.purge_after = None
+    product.sort_order = (max_order if max_order is not None else -1) + 1
+    await db.commit()
+    await db.refresh(product)
+    return product
+
+
+@app.delete("/v1/products/{product_id}/permanent")
+async def permanently_delete_product(product_id: str, db: AsyncSession = Depends(get_db)):
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(404, "Product not found")
+    if product.deleted_at is None:
+        raise HTTPException(409, "产品必须先移入回收站")
+    await db.delete(product)
+    await db.commit()
+    return {"status": "deleted"}
 
 
 @app.get("/v1/products/{product_id}", response_model=ProductOut)
@@ -224,9 +479,42 @@ async def brain_patch(product_id: str, body: ProductBrainData, db: AsyncSession 
     return BrainOut(id=version.id, version=version.version, brain=version.brain_json)
 
 
+def xiaohongshu_opportunity_out(row: XiaohongshuOpportunity) -> OpportunityOut:
+    content = row.content
+    note_id = content.parent_content_id or content.platform_content_id
+    return OpportunityOut(
+        id=row.id,
+        status=row.status,
+        subreddit="小红书",
+        title=content.title or ("用户评论" if content.target_type == "COMMENT" else "小红书笔记"),
+        body=content.body,
+        permalink=f"https://www.xiaohongshu.com/explore/{note_id}",
+        intent_label=(
+            "SEEKING_RECOMMENDATION"
+            if row.opportunity_score >= 0.7
+            else "GENERAL_DISCUSSION"
+        ),
+        intent_confidence=row.opportunity_score,
+        opportunity_score=row.opportunity_score,
+        risk_score=row.risk_score,
+        recall_sources=[content.source_keyword, content.target_type],
+        publish_status=row.status if row.status == "COMMENTED" else None,
+    )
+
+
 @app.get("/v1/products/{product_id}/opportunities", response_model=list[OpportunityOut])
 async def opportunities(product_id: str, db: AsyncSession = Depends(get_db)):
     await get_product(product_id, db)
+    xhs_rows = (
+        await db.scalars(
+            select(XiaohongshuOpportunity)
+            .options(selectinload(XiaohongshuOpportunity.content))
+            .where(XiaohongshuOpportunity.product_id == product_id)
+            .order_by(XiaohongshuOpportunity.opportunity_score.desc())
+        )
+    ).all()
+    if xhs_rows:
+        return [xiaohongshu_opportunity_out(row) for row in xhs_rows]
     rows = (
         await db.scalars(
             select(Candidate)

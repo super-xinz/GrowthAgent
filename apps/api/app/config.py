@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     autopublish_enabled: bool = False
     global_kill_switch: bool = False
     reddit_app_approval_status: str = "DEVELOPMENT_ONLY"
+    xiaohongshu_mcp_url: str = "http://xiaohongshu-mcp:18060"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
