@@ -26,6 +26,15 @@ class Base(DeclarativeBase):
     pass
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value_encrypted: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now, onupdate=now
+    )
+
+
 class Product(Base):
     __tablename__ = "products"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

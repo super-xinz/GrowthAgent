@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {ArrowUpRight, Trash2} from "lucide-react";
+import {ArrowRight, MoreHorizontal, Trash2} from "lucide-react";
 import {useRouter} from "next/navigation";
 import {useState} from "react";
 import {
@@ -72,59 +72,49 @@ export default function ProductManager({
     {error && <div className="inline-error" role="alert">{error}</div>}
 
     {products.length ? (
-      <section className="product-grid">
+      <section className="product-table" aria-label="产品运行状态">
+        <div className="product-table-head" aria-hidden="true">
+          <span>产品</span><span>状态</span><span>高意向</span><span>待触达</span><span>下次运行</span><span />
+        </div>
         {products.map((product) => (
           <article className="product-card" key={product.id}>
-              <div className="product-card-head">
-                <div>
+              <div className="product-identity">
+                <span className="product-avatar">{product.name.slice(0,1).toLocaleUpperCase("zh-CN")}</span>
+                <div className="product-card-head">
                   <h3>{product.name}</h3>
                   <div className="product-card-source">{sourceLabel(product)}</div>
                 </div>
-                <div className="flex-row" style={{ gap: "8px" }}>
-                  <span className={`status ${automationLabel(product).tone}`}>
-                    <i className="status-dot" />
-                    {automationLabel(product).label}
-                  </span>
+              </div>
 
-                  <button
-                    disabled={busy}
-                    onClick={() => void remove(product)}
-                    className="icon-button"
-                    aria-label={`${product.name} 移到回收站`}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+              <span className={`status ${automationLabel(product).tone}`}>
+                <i className="status-dot" />
+                {automationLabel(product).label}
+              </span>
+
+              <div className="product-cell metric-cell high-intent-cell"><span>高意向</span><strong>{workflowByProduct[product.id]?.highIntent ?? 0}</strong></div>
+              <div className="product-cell metric-cell ready-cell"><span>待触达</span><strong>{workflowByProduct[product.id]?.ready ?? 0}</strong></div>
+
+              <span className="product-card-next"><span>下次运行</span><strong>
+                  {product.next_auto_search_at ? new Date(product.next_auto_search_at).toLocaleString("zh-CN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Shanghai"}) : "即将开始"}
+                </strong></span>
+
+              <div className="product-row-actions">
+                <button
+                  disabled={busy}
+                  onClick={() => void remove(product)}
+                  className="icon-button delete-action"
+                  aria-label={`${product.name} 移到回收站`}
+                >
+                  <Trash2 size={15} />
+                </button>
+                <Link className="row-open" href={`/products/${product.id}`} aria-label={`打开 ${product.name}`}><ArrowRight size={17}/></Link>
               </div>
 
               {product.automation_error && (
-                <div className="compact-alert" style={{marginTop: "18px"}}>
+                <div className="compact-alert product-error">
                   {conciseError(product.automation_error)}
                 </div>
               )}
-
-              <div className="product-card-metrics">
-                <div>
-                  <strong>{workflowByProduct[product.id]?.highIntent ?? 0}</strong>
-                  <span>高意向</span>
-                </div>
-                <div>
-                  <strong>{workflowByProduct[product.id]?.ready ?? 0}</strong>
-                  <span>待触达</span>
-                </div>
-                <div>
-                  <strong>{workflowByProduct[product.id]?.published ?? 0}</strong>
-                  <span>已触达</span>
-                </div>
-              </div>
-
-              <div className="product-card-foot">
-                <span className="product-card-next">下次搜索
-                <strong>
-                  {product.next_auto_search_at ? new Date(product.next_auto_search_at).toLocaleString("zh-CN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Shanghai"}) : "即将开始"}
-                </strong></span>
-                <Link className="button secondary compact" href={`/products/${product.id}`}>查看详情 <ArrowUpRight size={15}/></Link>
-              </div>
           </article>
         ))}
       </section>
@@ -138,7 +128,7 @@ export default function ProductManager({
 
     <details className="trash-panel">
       <summary>
-        回收站
+        <span><MoreHorizontal size={16}/> 回收站</span>
         <span className="badge-chip">{trashedProducts.length}</span>
       </summary>
 

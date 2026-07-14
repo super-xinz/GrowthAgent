@@ -1,8 +1,6 @@
-import {getXiaohongshuStatus} from "@/lib/api";
 import XiaohongshuLogin from "./XiaohongshuLogin";
+import ModelSettings from "./ModelSettings";
 
-export default async function AccountPage(){
-  let status=null;
-  try{status=await getXiaohongshuStatus()}catch{}
-  return <><header className="page-header account-header"><div><div className="eyebrow">ACCOUNT</div><h1>小红书账号</h1><p>连接账号，开始发现与触达。</p></div></header><XiaohongshuLogin initialStatus={status}/></>;
+export default function AccountPage(){
+  return <><header className="page-header account-header"><div><div className="eyebrow">SETTINGS</div><h1>连接与模型</h1><p>配置模型服务，并管理本机的小红书登录状态。</p></div></header><div className="settings-stack"><ModelSettings/><XiaohongshuLogin initialStatus={null}/></div></>;
 }

@@ -7,7 +7,7 @@ export default async function Opportunities({params}:{params:Promise<{id:string}
   const [rows, product]=await Promise.all([getOpportunities(id), getProduct(id)]);
   if(!product)notFound();
   return <>
-    <header className="page-header result-header"><div><div className="eyebrow">{product.name} · DISCOVERY</div><h1>发现结果</h1><p>高匹配自动触达，其余结果可手动发布。</p></div></header>
+    <header className="page-header result-header"><div><div className="eyebrow">{product.name}</div><h1>机会</h1><p>按优先级判断需求，只在语境明确时触达。</p></div></header>
     <OpportunityBoard rows={rows}/>
   </>;
 }

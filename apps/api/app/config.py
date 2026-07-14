@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "development"
+    app_url: str = "http://localhost:3000"
+    secret_key: str = "change_me"
+    encryption_key: str = "change_me"
     database_url: str = "sqlite+aiosqlite:///./reddit_growth.db"
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/1"

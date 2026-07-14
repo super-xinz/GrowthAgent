@@ -2,6 +2,7 @@
 
 import {useState} from "react";
 import {useRouter} from "next/navigation";
+import {Clock3, Pause, Play, ShieldCheck} from "lucide-react";
 import {API,responseDetail} from "@/lib/api";
 
 type Product={
@@ -46,18 +47,28 @@ export default function ProductModeControls({product}:{product:Product}){
     finally{setBusy(false);}
   }
 
+  const nextRun=product.next_auto_search_at?new Date(product.next_auto_search_at).toLocaleString("zh-CN",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Shanghai"}):"即将开始";
+
   return <section className="automation-panel">
     <div className="automation-main">
-      <div className="automation-title-row"><span className={`run-indicator ${product.autopublish_enabled?"online":""}`}/><div><div className="eyebrow">自动获客</div><h2>{product.autopublish_enabled?"正在低频运行":"任务已暂停"}</h2></div></div>
-      <p>{product.autopublish_enabled?`下一轮 ${product.next_auto_search_at?new Date(product.next_auto_search_at).toLocaleString("zh-CN",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Shanghai"}):"即将开始"}`:"不会搜索或发送评论"}</p>
+      <div className="automation-title-row">
+        <div><div className="eyebrow">自动化</div><h2>需求发现与低频触达</h2></div>
+        <span className={`status ${product.autopublish_enabled?"":"muted"}`}><i className="status-dot"/>{product.autopublish_enabled?"运行中":"已暂停"}</span>
+      </div>
+      <div className="next-run">
+        <Clock3 size={18}/>
+        <div><span>下一次运行</span><strong>{product.autopublish_enabled?nextRun:"不会自动运行"}</strong></div>
+      </div>
       {product.automation_error&&<div className="compact-alert">{conciseError(product.automation_error)}</div>}
       {message&&<div className={failed?"feedback-error":"feedback-message"} role={failed?"alert":"status"}>{message}</div>}
-      <div className="actions"><button className="button" disabled={busy||!product.autopublish_enabled} onClick={runNow}>{busy?"运行中…":"立即运行一次"}</button><button className="button ghost" disabled={busy} onClick={toggle}>{product.autopublish_enabled?"暂停":"重新开启"}</button></div>
+      <div className="actions"><button className="button" disabled={busy||!product.autopublish_enabled} onClick={runNow}><Play size={16}/>{busy?"运行中…":"立即运行"}</button><button className="button ghost" disabled={busy} onClick={toggle}>{product.autopublish_enabled?<><Pause size={16}/>暂停</>:<><Play size={16}/>重新开启</>}</button></div>
     </div>
     <div className="guardrails">
-      <div><span>自动门槛</span><strong>≥ {Math.round(product.auto_score_threshold*100)} 分</strong></div>
-      <div><span>搜索节奏</span><strong>每 {product.search_interval_hours} 小时</strong></div>
-      <div><span>发布冷却</span><strong>至少 {product.min_publish_interval_hours} 小时</strong></div>
+      <div className="guardrail-heading"><ShieldCheck size={17}/><span>安全规则</span></div>
+      <div><span>机会门槛</span><strong>≥ {Math.round(product.auto_score_threshold*100)}</strong></div>
+      <div><span>风险上限</span><strong>≤ {Math.round(product.auto_risk_threshold*100)}</strong></div>
+      <div><span>搜索间隔</span><strong>{product.search_interval_hours} 小时</strong></div>
+      <div><span>触达冷却</span><strong>{product.min_publish_interval_hours} 小时</strong></div>
       <div><span>每日上限</span><strong>{product.daily_reply_limit} 条</strong></div>
     </div>
   </section>;
