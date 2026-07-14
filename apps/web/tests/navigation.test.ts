@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  buildBreadcrumbs,
   filterProducts,
   isNavActive,
   moveProduct,
   parseProductId,
   summarizeProducts,
+  summarizeOpportunityWorkflow,
+  filterOpportunities,
   retentionDays,
 } from "../lib/navigation.ts";
 
@@ -34,19 +35,6 @@ test("rounds remaining retention up to whole days", () => {
   const now = new Date("2026-07-12T00:00:00Z");
   assert.equal(retentionDays("2026-07-18T12:00:00Z", now), 7);
   assert.equal(retentionDays("2026-07-11T00:00:00Z", now), 0);
-});
-
-test("builds location breadcrumbs for product sections", () => {
-  assert.deepEqual(buildBreadcrumbs({id: "alpha", name: "Alpha"}, "产品概览"), [
-    {label: "总览", href: "/dashboard"},
-    {label: "Alpha", href: null},
-    {label: "产品概览", href: null},
-  ]);
-  assert.deepEqual(buildBreadcrumbs({id: "alpha", name: "Alpha"}, "机会"), [
-    {label: "总览", href: "/dashboard"},
-    {label: "Alpha", href: "/products/alpha"},
-    {label: "机会", href: null},
-  ]);
 });
 
 test("filters products case-insensitively without changing source order", () => {
@@ -91,4 +79,31 @@ test("returns zero metrics for an empty product list", () => {
     running: 0,
     attention: 0,
   });
+});
+
+test("summarizes opportunity workflow states", () => {
+  const rows = [
+    {opportunity_score: 0.82, generated_reply: "这个思路可以试试", publish_status: null},
+    {opportunity_score: 0.74, generated_reply: null, publish_status: null},
+    {opportunity_score: 0.61, generated_reply: "低分但合格草稿", publish_status: null},
+    {opportunity_score: 0.9, generated_reply: "已发布", publish_status: "COMMENTED"},
+    {opportunity_score: 0.88, generated_reply: "这是一条来自旧版本并且明显超过二十五个字符的长草稿所以必须冻结", publish_status: null},
+  ];
+  assert.deepEqual(summarizeOpportunityWorkflow(rows), {
+    total: 5,
+    highIntent: 3,
+    ready: 2,
+    published: 1,
+  });
+});
+
+test("filters opportunities by workflow view", () => {
+  const rows = [
+    {opportunity_score: 0.8, generated_reply: "草稿", publish_status: null},
+    {opportunity_score: 0.5, generated_reply: null, publish_status: null},
+    {opportunity_score: 0.9, generated_reply: "完成", publish_status: "COMMENTED"},
+  ];
+  assert.equal(filterOpportunities(rows, "qualified").length, 2);
+  assert.equal(filterOpportunities(rows, "attention").length, 0);
+  assert.equal(filterOpportunities(rows, "published").length, 1);
 });

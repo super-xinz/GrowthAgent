@@ -1,41 +1,27 @@
-# ThreadPilot
+# GrowthAgent
 
-ThreadPilot 是一个面向小红书公开讨论的产品机会发现与人工确认评论工具。它读取产品网站或 GitHub 公开资料构建 Product Brain，搜索相关小红书笔记与公开评论，生成有依据的中文草稿，并在每次真实评论或回复前要求人工二次确认。
+GrowthAgent 是一个低频运行的小红书需求发现与产品触达工具。它读取产品网站或 GitHub 的公开资料，建立带证据的 Product Brain，寻找正在经历相关痛点的人，并只在高匹配、低风险时发送一句简短且披露关系的回复。
 
-ThreadPilot 不发布笔记，不自动点赞或收藏，不批量评论，也没有自动发布模式。
+## 当前产品定义
 
-## 已实现能力
+- 每个产品默认每 3 小时搜索一轮；每轮 3 个中文需求词，每词读取 2 个结果；
+- 机会分达到 75、风险分不高于 35 才能进入自动发布；
+- 每轮最多发布 1 条，两次发布至少间隔 4 小时，每个产品每天最多 2 条；
+- 回复严格为 6–25 个字符，不含链接，不编造能力；推广自有产品时必须自然披露关系；
+- 模型评分失败时降级分最高 64，不会自动发布；连续 3 次运行异常后自动暂停；
+- 外部写操作不重试，避免平台已经接收但响应丢失时重复评论；
+- 不发布笔记，不点赞、收藏、关注、私信，也不轮换账号或绕过平台限制。
 
-- 中文产品管理：创建、切换、拖拽排序、回收站恢复，软删除内容 7 天后永久清理；
-- Product Brain：抓取公开网站/GitHub，保存来源证据、能力边界、目标用户和检索词；
-- 小红书扫码登录：Cookie 只保存在本地 `.xiaohongshu-data/`，不会写入数据库或日志；
-- 真实公开内容搜索：保存笔记 ID、评论 ID 和详情访问令牌，过滤非笔记占位项并抑制重复结果；
-- 笔记与评论机会：读取公开正文及评论，区分笔记评论和评论回复目标；
-- 中文草稿：禁止链接、虚假官方身份和未经确认的开发者身份；
-- 人工确认：确认令牌绑定目标、草稿哈希和当前小红书账号，10 分钟有效且只能使用一次；
-- 评论安全：每日产品上限、全局停止开关、写操作不自动重试；
-- 数据库迁移：API 启动时自动执行 Alembic，当前迁移版本为 `0005`。
-
-## 技术栈
-
-- Next.js 15、React 19、TypeScript；
-- FastAPI、SQLAlchemy Async、Alembic；
-- PostgreSQL 16、Redis、Celery；
-- Docker Compose；
-- OpenAI-compatible LLM；
-- 本地 `xiaohongshu-mcp` 服务与 CloakBrowser。
-
-## 快速启动
+## 启动
 
 需要 macOS Apple Silicon 和 Docker Desktop。
 
 ```bash
-git clone https://github.com/super-xinz/ThreadPilot.git
-cd ThreadPilot
 cp .env.example .env
+make dev
 ```
 
-在 `.env` 中配置大模型：
+在 `.env` 中配置 OpenAI-compatible 模型：
 
 ```dotenv
 LLM_PROVIDER=openai
@@ -44,70 +30,27 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_STRONG_MODEL=接口实际支持的模型名
 ```
 
-启动全部服务：
+打开：
 
-```bash
-make dev
-```
+- 工作台：<http://localhost:3000/dashboard>
+- 小红书登录：<http://localhost:3000/account>
+- API 文档：<http://localhost:8000/docs>
 
-首次构建小红书 MCP 时会下载约 200MB 的浏览器运行文件。完成后访问：
+首次使用：扫码登录小红书，添加产品公开地址，确认产品关系披露，然后开启自动获客。新产品默认直接开启；可以在产品页随时暂停或立即运行一轮。
 
-- 控制台：http://localhost:3000/dashboard
-- 小红书账号：http://localhost:3000/account
-- API 文档：http://localhost:8000/docs
-- MCP 健康检查：http://localhost:18060/health
-
-停止服务：
-
-```bash
-make down
-```
-
-## 第一次使用
-
-1. 打开 `/account`，使用小红书 App 扫码登录；
-2. 在 `/products/new` 添加产品网站或 GitHub 地址；
-3. 检查 Product Brain 的来源证据、目标用户和能力边界；
-4. 在产品概览输入关键词，点击“搜索小红书机会”；
-5. 在机会页查看公开笔记和评论，点击“生成草稿”；
-6. 编辑草稿，点击“检查并确认”；
-7. 在弹窗中核对目标与完整文案；
-8. 只有点击“确认并发布评论”才会向小红书执行一次评论或回复。
-
-任何草稿变化都会使已有确认失效。切换小红书账号、令牌过期、重复使用令牌、达到每日上限或开启全局停止开关时，执行端点都会拒绝发布。
-
-## 页面
-
-- `/dashboard`：产品总览、排序和回收站；
-- `/account`：扫码登录、账号状态和重新登录；
-- `/products/new`：创建产品并分析公开资料；
-- `/products/{id}`：Product Brain、搜索入口和产品设置；
-- `/products/{id}/opportunities`：笔记/评论机会、草稿编辑和最终确认；
-- `/products/{id}/conversations`：已执行互动的后续状态；
-- `/products/{id}/safety`：账号状态、安全边界和操作记录。
-
-## 核心 API
+## 核心流程
 
 ```text
-GET    /v1/xiaohongshu/status
-GET    /v1/xiaohongshu/login/qrcode
-GET    /v1/xiaohongshu/account
-DELETE /v1/xiaohongshu/login
-
-POST   /v1/products
-PUT    /v1/products/order
-DELETE /v1/products/{id}
-POST   /v1/products/{id}/restore
-DELETE /v1/products/{id}/permanent
-
-POST   /v1/products/{id}/xiaohongshu/search
-GET    /v1/products/{id}/opportunities
-POST   /v1/xiaohongshu/opportunities/{id}/draft
-POST   /v1/xiaohongshu/opportunities/{id}/confirm
-POST   /v1/xiaohongshu/opportunities/{id}/execute
+公开产品资料
+  → Product Brain（用户 / 痛点 / 能力证据 / 搜索图谱）
+  → 每 3 小时选择 3 个中文需求词
+  → 搜索笔记与评论
+  → 严格评分（用户匹配 / 痛点 / 意图 / 能力 / 时机）
+  → 75 分与风险门槛
+  → 6–25 字口语回复
+  → 冷却、日上限、登录与目标刷新检查
+  → 最多发布 1 条
 ```
-
-`execute` 是唯一会产生小红书外部写操作的端点。它必须收到由 `confirm` 返回的一次性令牌和完全一致的草稿正文。
 
 ## 测试
 
@@ -118,24 +61,15 @@ make typecheck
 make build
 ```
 
-验证范围包括 Product Brain、产品生命周期、MCP 客户端、真实响应规范化、搜索去重、笔记/评论机会、草稿质量、目标/账号/草稿绑定、一次性确认、过期与每日上限、前端导航及生产构建。
-
-## 数据与安全
-
-- `.env`、`.xiaohongshu-data/`、数据库卷和 Celery 状态文件不会进入 Git；
-- 不读取浏览器 Cookie 文件内容，不在 API 响应或日志中输出 Cookie；
-- 不发布小红书笔记、图片或视频；
-- 不自动点赞、收藏、关注、私信或批量互动；
-- 评论/回复写操作不做网络重试，避免响应丢失时重复发布；
-- 请只将它用于你有权运营的账号，并自行遵守小红书平台规则和适用法律。
-
-## 项目结构
+## 目录
 
 ```text
-apps/api       FastAPI、任务与数据库迁移
-apps/web       中文 Next.js 控制台
-tests          后端与工作流测试
-infra/docker   API/Web 镜像
+apps/api       FastAPI、自动化任务、提示词与数据库迁移
+apps/web       极简 Next.js 控制台
+tests          后端和小红书工作流测试
+infra/docker   API / Web 镜像
 可以参考的开源项目/xiaohongshu-mcp-main
-               本地小红书 MCP 服务
+               项目运行所需的精简本地 MCP 源码
 ```
+
+Cookie 只保存在本地 `.xiaohongshu-data/`。请仅使用你有权运营的账号，并遵守平台规则和适用法律。

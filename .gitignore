@@ -14,4 +14,3 @@ dist/
 celerybeat-schedule*
 .xiaohongshu-data/
 .DS_Store
-可以参考的开源项目/

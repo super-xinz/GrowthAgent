@@ -1,16 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import {ArrowUpRight, Trash2} from "lucide-react";
 import {useRouter} from "next/navigation";
 import {useState} from "react";
 import {
   permanentlyDeleteProduct,
-  reorderProducts,
   restoreProduct,
   trashProduct,
 } from "@/lib/api";
-import {moveProduct, retentionDays, type ProductNavItem} from "@/lib/navigation";
-import {zhLabel} from "@/lib/labels";
+import {retentionDays, type ProductNavItem} from "@/lib/navigation";
 
 function sourceLabel(product: ProductNavItem) {
   if (product.website_url) {
@@ -20,35 +19,30 @@ function sourceLabel(product: ProductNavItem) {
   return product.github_url?.replace(/^https?:\/\/(www\.)?github\.com\//, "GitHub · ") || "尚未设置来源";
 }
 
+function conciseError(message: string) {
+  const plain = message.split(/error value:|goroutine\s+\d+|runtime\/debug/i)[0].trim();
+  return plain.length > 120 ? `${plain.slice(0, 117)}…` : plain;
+}
+
 export default function ProductManager({
   initialProducts,
   trashedProducts,
-  communityCounts,
+  workflowByProduct,
 }: {
   initialProducts: ProductNavItem[];
   trashedProducts: ProductNavItem[];
-  communityCounts: Record<string, number>;
+  workflowByProduct: Record<string, {highIntent:number;ready:number;published:number}>;
 }) {
   const router = useRouter();
-  const [products, setProducts] = useState(initialProducts);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const products = initialProducts;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function persistOrder(next: ProductNavItem[]) {
-    const previous = products;
-    setProducts(next);
-    setError("");
-    try { await reorderProducts(next.map((product) => product.id)); }
-    catch (reason) {
-      setProducts(previous);
-      setError(reason instanceof Error ? reason.message : "保存顺序失败，请重试。");
-    }
-  }
-
-  async function move(from: number, to: number) {
-    if (busy) return;
-    await persistOrder(moveProduct(products, from, to));
+  function automationLabel(product: ProductNavItem) {
+    if (!product.autopublish_enabled) return {label: "已暂停", tone: "muted"};
+    if (product.automation_status === "PAUSED_SAFETY") return {label: "安全暂停", tone: "warning"};
+    if (product.automation_error || product.automation_status === "ATTENTION") return {label: "需处理", tone: "warning"};
+    return {label: "自动运行", tone: ""};
   }
 
   async function remove(product: ProductNavItem) {
@@ -76,35 +70,96 @@ export default function ProductManager({
 
   return <>
     {error && <div className="inline-error" role="alert">{error}</div>}
-    {products.length ? <section className="product-grid">
-      {products.map((product, index) => <article
-        className="product-card manageable"
-        key={product.id}
-        draggable={!busy}
-        onDragStart={() => setDragIndex(index)}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={() => { if (dragIndex !== null) void move(dragIndex, index); setDragIndex(null); }}
-        onDragEnd={() => setDragIndex(null)}
-      >
-        <div className="product-card-head">
-          <div className="product-identity"><span className="drag-handle" title="拖拽调整顺序" aria-hidden="true">⠿</span><div><h3>{product.name}</h3><div className="product-source">{sourceLabel(product)}</div></div></div>
-          <div className="product-card-tools"><span className="status">{zhLabel(product.status)}</span><details className="product-menu"><summary aria-label={`${product.name} 更多操作`}>•••</summary><button disabled={busy} onClick={() => void remove(product)}>移到回收站</button></details></div>
-        </div>
-        <div className="product-meta"><span>小红书评论</span><span>每日上限 <strong>{product.daily_reply_limit ?? 0}</strong></span></div>
-        <div className="product-card-actions">
-          <Link className="product-open-link" href={`/products/${product.id}`}>打开产品 <span aria-hidden="true">→</span></Link>
-        </div>
-      </article>)}
-    </section> : <section className="card empty product-empty"><h2>从第一个产品开始</h2><p>添加公开网站或 GitHub 仓库，ThreadPilot 会构建带有来源证据的 Product Brain。</p><Link className="button" href="/products/new">新建产品</Link></section>}
 
-    <details className="trash-panel card">
-      <summary>回收站 <span className="status">{trashedProducts.length}</span></summary>
-      <p>产品删除后保留 7 天，随后由系统永久清理。</p>
-      {trashedProducts.map((product) => <div className="trash-row" key={product.id}>
-        <div><strong>{product.name}</strong><small>剩余 {product.purge_after ? retentionDays(product.purge_after) : 0} 天</small></div>
-        <div className="trash-actions"><button className="button secondary compact" disabled={busy} onClick={() => void restore(product)}>恢复</button><button className="button danger compact" disabled={busy} onClick={() => void purge(product)}>立即永久删除</button></div>
-      </div>)}
-      {!trashedProducts.length && <div className="empty">回收站为空。</div>}
+    {products.length ? (
+      <section className="product-grid">
+        {products.map((product) => (
+          <article className="product-card" key={product.id}>
+              <div className="product-card-head">
+                <div>
+                  <h3>{product.name}</h3>
+                  <div className="product-card-source">{sourceLabel(product)}</div>
+                </div>
+                <div className="flex-row" style={{ gap: "8px" }}>
+                  <span className={`status ${automationLabel(product).tone}`}>
+                    <i className="status-dot" />
+                    {automationLabel(product).label}
+                  </span>
+
+                  <button
+                    disabled={busy}
+                    onClick={() => void remove(product)}
+                    className="icon-button"
+                    aria-label={`${product.name} 移到回收站`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {product.automation_error && (
+                <div className="compact-alert" style={{marginTop: "18px"}}>
+                  {conciseError(product.automation_error)}
+                </div>
+              )}
+
+              <div className="product-card-metrics">
+                <div>
+                  <strong>{workflowByProduct[product.id]?.highIntent ?? 0}</strong>
+                  <span>高意向</span>
+                </div>
+                <div>
+                  <strong>{workflowByProduct[product.id]?.ready ?? 0}</strong>
+                  <span>待触达</span>
+                </div>
+                <div>
+                  <strong>{workflowByProduct[product.id]?.published ?? 0}</strong>
+                  <span>已触达</span>
+                </div>
+              </div>
+
+              <div className="product-card-foot">
+                <span className="product-card-next">下次搜索
+                <strong>
+                  {product.next_auto_search_at ? new Date(product.next_auto_search_at).toLocaleString("zh-CN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Shanghai"}) : "即将开始"}
+                </strong></span>
+                <Link className="button secondary compact" href={`/products/${product.id}`}>查看详情 <ArrowUpRight size={15}/></Link>
+              </div>
+          </article>
+        ))}
+      </section>
+    ) : (
+      <section className="empty-state">
+        <h2 className="heading-lg">添加第一个产品</h2>
+        <p>GrowthAgent 会自动理解产品并寻找真实需求。</p>
+        <Link className="btn-pill btn-primary" href="/products/new">添加产品</Link>
+      </section>
+    )}
+
+    <details className="trash-panel">
+      <summary>
+        回收站
+        <span className="badge-chip">{trashedProducts.length}</span>
+      </summary>
+
+      {trashedProducts.length > 0 ? (
+        <div style={{marginTop: "18px"}}>
+          {trashedProducts.map((product) => (
+            <div className="trash-row" key={product.id}>
+              <div>
+                <strong style={{ display: "block", fontSize: "16px" }}>{product.name}</strong>
+                <small className="body-sm">剩余 {product.purge_after ? retentionDays(product.purge_after) : 0} 天</small>
+              </div>
+              <div className="flex-row">
+                <button className="btn-pill btn-outline-dark" style={{ height: "40px", padding: "0 20px" }} disabled={busy} onClick={() => void restore(product)}>恢复</button>
+                <button className="btn-pill btn-primary" style={{ height: "40px", padding: "0 20px" }} disabled={busy} onClick={() => void purge(product)}>立即永久删除</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ padding: "32px 0", color: "var(--body)" }}>回收站为空。</div>
+      )}
     </details>
   </>;
 }

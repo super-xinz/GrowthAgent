@@ -19,7 +19,7 @@ services:
     build:
       context: ./可以参考的开源项目/xiaohongshu-mcp-main
       dockerfile: Dockerfile.arm64
-    image: threadpilot-xiaohongshu-mcp:local
+    image: growthagent-xiaohongshu-mcp:local
     restart: unless-stopped
     init: true
     tty: true
@@ -36,7 +36,7 @@ services:
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
     env_file: .env
     ports: ["8000:8000"]
-    volumes: [./apps/api:/app/apps/api, ./packages:/app/packages, ./tests:/app/tests]
+    volumes: [./apps/api:/app/apps/api, ./tests:/app/tests]
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
@@ -45,7 +45,7 @@ services:
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
     command: celery -A app.worker.celery_app worker -B --loglevel=INFO
     env_file: .env
-    volumes: [./apps/api:/app/apps/api, ./packages:/app/packages]
+    volumes: [./apps/api:/app/apps/api]
     depends_on: [postgres, redis]
   web:
     build: {context: ., dockerfile: infra/docker/web.Dockerfile}

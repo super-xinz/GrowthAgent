@@ -66,9 +66,21 @@ async def build_brain(db: AsyncSession, product: Product, provider: LLMProvider)
     ).all()
     if not sources:
         raise ValueError("Ingest at least one product source first")
+    # Product sites often repeat navigation and long documentation on every page.
+    # A bounded evidence window is faster and still preserves exact quote validation.
+    compact_sources = []
+    remaining = 16_000
+    for source in sources[:8]:
+        content = source.content[: min(4_000, remaining)]
+        if not content:
+            continue
+        compact_sources.append({"id": source.id, "url": source.url, "content": content})
+        remaining -= len(content)
+        if remaining <= 0:
+            break
     payload = {
         "product_name": product.name,
-        "sources": [{"id": s.id, "url": s.url, "content": s.content} for s in sources],
+        "sources": compact_sources,
     }
     schema = ProductBrainData.model_json_schema()
     raw = await provider.generate_structured("product_brain_v2", payload, schema)

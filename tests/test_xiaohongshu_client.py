@@ -65,3 +65,21 @@ async def test_write_contract_and_remote_error():
         await client.reply("feed-1", "token", "测试回复", comment_id="comment-1")
     assert calls.count("/api/v1/feeds/comment/reply") == 1
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_remote_error_includes_actionable_mcp_details():
+    def handler(request: httpx.Request):
+        return httpx.Response(
+            500,
+            json={
+                "error": "回复评论失败",
+                "code": "REPLY_COMMENT_FAILED",
+                "details": "提交按钮一直不可用",
+            },
+        )
+
+    client = XiaohongshuClient(transport=transport(handler))
+    with pytest.raises(XiaohongshuError, match="提交按钮一直不可用"):
+        await client.reply("feed-1", "token", "测试回复", comment_id="comment-1")
+    await client.close()

@@ -8,7 +8,49 @@ export type ProductNavItem = {
   sort_order?: number;
   deleted_at?: string | null;
   purge_after?: string | null;
+  is_owned?: boolean;
+  autopublish_enabled?: boolean;
+  automation_status?: string;
+  automation_error?: string | null;
+  next_auto_search_at?: string | null;
+  last_auto_publish_at?: string | null;
 };
+
+export type OpportunityWorkflowItem = {
+  opportunity_score: number;
+  generated_reply?: string | null;
+  publish_status?: string | null;
+};
+
+export type OpportunityView = "all" | "qualified" | "published" | "attention";
+
+export function isCurrentAutoReply(reply?: string | null) {
+  const length = reply?.trim().length ?? 0;
+  return length >= 6 && length <= 25;
+}
+
+export function summarizeOpportunityWorkflow(rows: OpportunityWorkflowItem[]) {
+  return {
+    total: rows.length,
+    highIntent: rows.filter((row) => row.opportunity_score >= 0.75).length,
+    ready: rows.filter((row) => isCurrentAutoReply(row.generated_reply) && !row.publish_status).length,
+    published: rows.filter((row) => row.publish_status === "COMMENTED").length,
+  };
+}
+
+export function filterOpportunities(
+  rows: OpportunityWorkflowItem[],
+  view: OpportunityView,
+) {
+  if (view === "qualified") return rows.filter((row) => row.opportunity_score >= 0.75);
+  if (view === "attention") {
+    return rows.filter((row) => Boolean((row as OpportunityWorkflowItem & {publish_error?:string|null}).publish_error));
+  }
+  if (view === "published") {
+    return rows.filter((row) => row.publish_status === "COMMENTED");
+  }
+  return rows;
+}
 
 export function parseProductId(pathname: string) {
   const match = pathname.match(/^\/products\/([^/]+)/);
@@ -38,20 +80,6 @@ export function summarizeProducts(products: ProductNavItem[]) {
 
 export function isNavActive(pathname: string, href: string) {
   return pathname === href;
-}
-
-export function buildBreadcrumbs(
-  product: {id: string; name: string},
-  section: string,
-) {
-  return [
-    {label: "总览", href: "/dashboard"},
-    {
-      label: product.name,
-      href: section === "产品概览" ? null : `/products/${product.id}`,
-    },
-    {label: section, href: null},
-  ];
 }
 
 export function moveProduct<T>(items: T[], from: number, to: number) {

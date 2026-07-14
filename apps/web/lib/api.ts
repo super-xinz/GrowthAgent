@@ -21,10 +21,6 @@ export const getProducts=()=>apiJson("/v1/products");
 export const getProduct=(id:string)=>apiJson(`/v1/products/${id}`,{allow404:true});
 export const getBrain=(id:string)=>apiJson(`/v1/products/${id}/brain`,{allow404:true});
 export const getOpportunities=(id:string)=>apiJson(`/v1/products/${id}/opportunities`);
-export const getAnalytics=(id:string)=>apiJson(`/v1/products/${id}/analytics/overview`);
-export const getConversations=(id:string)=>apiJson(`/v1/products/${id}/conversations`);
-export const getRiskEvents=(id:string)=>apiJson(`/v1/products/${id}/risk-events`);
-export const getAuditLog=(id:string)=>apiJson(`/v1/products/${id}/audit-log`);
 export const getTrashedProducts=()=>apiJson("/v1/products/trash");
 
 async function mutateJson(path:string,method:string,body?:unknown){

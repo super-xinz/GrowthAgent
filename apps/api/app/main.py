@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from .config import get_settings
+from .automation import AutomationError, run_product_automation
 from .database import get_db
 from .ingestion import ingest_url
 from .models import (
@@ -27,6 +28,7 @@ from .models import (
     XiaohongshuOpportunity,
 )
 from .providers import provider_for
+from .providers import LLMProviderError
 from .schemas import (
     AnalyticsOverviewOut,
     BrainOut,
@@ -46,8 +48,6 @@ from .schemas import (
     SourceOut,
     SubredditOut,
     TrackingEventIn,
-    XiaohongshuCommentBody,
-    XiaohongshuExecuteIn,
     XiaohongshuSearchIn,
 )
 from .services import (
@@ -61,18 +61,17 @@ from .services import (
 )
 from .xiaohongshu_client import XiaohongshuClient, XiaohongshuError
 from .xiaohongshu_service import (
-    ConfirmationError,
-    consume_confirmation,
-    create_confirmation,
-    ensure_daily_quota,
-    generate_xiaohongshu_draft,
+    XiaohongshuTargetError,
+    generate_qualifying_drafts,
     import_search_opportunities,
+    manually_generate_and_publish_opportunity,
+    publish_best_qualifying_opportunity,
 )
 
 logger = logging.getLogger(__name__)
 
 
-app = FastAPI(title="ThreadPilot Xiaohongshu Growth API", version="0.1.0")
+app = FastAPI(title="GrowthAgent Xiaohongshu Growth API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -86,10 +85,10 @@ async def health():
     settings = get_settings()
     return {
         "status": "ok",
-        "mode": "guarded",
-        "autopublish": settings.autopublish_enabled,
+        "mode": "guarded_auto",
+        "autopublish": not settings.global_kill_switch,
+        "autopublish_scope": "per_product",
         "kill_switch": settings.global_kill_switch,
-        "reddit_app_status": settings.reddit_app_approval_status,
     }
 
 
@@ -127,16 +126,38 @@ async def xiaohongshu_logout():
 async def search_xiaohongshu(
     product_id: str, body: XiaohongshuSearchIn, db: AsyncSession = Depends(get_db)
 ):
-    await get_product(product_id, db)
+    product = await get_product(product_id, db)
     client = XiaohongshuClient()
+    provider = provider_for(get_settings())
     try:
-        await import_search_opportunities(
-            db, product_id, client, body.keyword.strip(), detail_limit=body.detail_limit
+        imported = await import_search_opportunities(
+            db, product_id, client, body.keyword.strip(), provider, detail_limit=body.detail_limit
         )
     except XiaohongshuError as error:
         raise HTTPException(503, str(error)) from error
     finally:
         await client.close()
+    await generate_qualifying_drafts(
+        db,
+        list({row.id for row in imported}),
+        provider,
+        threshold=product.auto_score_threshold,
+        risk_threshold=product.auto_risk_threshold,
+    )
+    if product.autopublish_enabled:
+        client = XiaohongshuClient()
+        try:
+            await publish_best_qualifying_opportunity(
+                db,
+                product,
+                client,
+                kill_switch=get_settings().global_kill_switch,
+                opportunity_ids=list({row.id for row in imported}),
+            )
+        except (XiaohongshuError, XiaohongshuTargetError) as error:
+            logger.warning("Manual search publish step skipped: %s", error)
+        finally:
+            await client.close()
     rows = list(
         (
             await db.scalars(
@@ -150,115 +171,33 @@ async def search_xiaohongshu(
     return [xiaohongshu_opportunity_out(row) for row in rows]
 
 
-async def get_xiaohongshu_opportunity(opportunity_id: str, db: AsyncSession):
-    row = await db.scalar(
-        select(XiaohongshuOpportunity)
-        .options(selectinload(XiaohongshuOpportunity.content))
-        .where(XiaohongshuOpportunity.id == opportunity_id)
-    )
-    if row is None:
-        raise HTTPException(404, "未找到小红书评论机会")
-    return row
-
-
-@app.post("/v1/xiaohongshu/opportunities/{opportunity_id}/draft")
-async def draft_xiaohongshu_comment(
-    opportunity_id: str, db: AsyncSession = Depends(get_db)
+@app.post("/v1/products/{product_id}/xiaohongshu/auto-search", response_model=list[OpportunityOut])
+async def auto_search_xiaohongshu(
+    product_id: str, db: AsyncSession = Depends(get_db)
 ):
-    row = await get_xiaohongshu_opportunity(opportunity_id, db)
     try:
-        body = await generate_xiaohongshu_draft(db, row, provider_for(get_settings()))
-    except (ValueError, RuntimeError) as error:
-        raise HTTPException(503, f"生成评论草稿失败：{error}") from error
-    return {"body": body}
-
-
-@app.post("/v1/xiaohongshu/opportunities/{opportunity_id}/confirm")
-async def confirm_xiaohongshu_comment(
-    opportunity_id: str,
-    body: XiaohongshuCommentBody,
-    db: AsyncSession = Depends(get_db),
-):
-    await get_xiaohongshu_opportunity(opportunity_id, db)
-    client = XiaohongshuClient()
-    try:
-        status = await client.login_status()
-        if not status.get("is_logged_in"):
-            raise HTTPException(409, "小红书账号未登录")
-        profile = await client.me()
-    except XiaohongshuError as error:
-        raise HTTPException(503, str(error)) from error
-    finally:
-        await client.close()
-    profile_data = profile.get("data") or profile
-    account_id = str((profile_data.get("userBasicInfo") or {}).get("redId") or "")
-    if not account_id:
-        raise HTTPException(503, "无法识别当前小红书账号")
-    confirmation = await create_confirmation(
-        db, opportunity_id, body.body, account_id=account_id
-    )
-    return {"token": confirmation.token, "expires_at": confirmation.expires_at}
-
-
-@app.post("/v1/xiaohongshu/opportunities/{opportunity_id}/execute")
-async def execute_xiaohongshu_comment(
-    opportunity_id: str,
-    body: XiaohongshuExecuteIn,
-    db: AsyncSession = Depends(get_db),
-):
-    row = await get_xiaohongshu_opportunity(opportunity_id, db)
-    settings = get_settings()
-    if settings.global_kill_switch:
-        raise HTTPException(409, "全局停止开关已开启")
-    product = await get_product(row.product_id, db)
-    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    comments_today = await db.scalar(
-        select(func.count(XiaohongshuOpportunity.id)).where(
-            XiaohongshuOpportunity.product_id == row.product_id,
-            XiaohongshuOpportunity.commented_at >= day_start,
-        )
-    )
-    try:
-        ensure_daily_quota(comments_today or 0, product.daily_reply_limit)
-    except ConfirmationError as error:
-        raise HTTPException(429, str(error)) from error
-    client = XiaohongshuClient()
-    try:
-        status = await client.login_status()
-        if not status.get("is_logged_in"):
-            raise HTTPException(409, "小红书账号未登录")
-        profile = await client.me()
-        profile_data = profile.get("data") or profile
-        account_id = str((profile_data.get("userBasicInfo") or {}).get("redId") or "")
-        await consume_confirmation(
+        await run_product_automation(
             db,
-            body.token,
-            body.body,
-            opportunity_id=opportunity_id,
-            account_id=account_id,
+            product_id,
+            provider_for(get_settings()),
+            get_settings(),
+            force=True,
         )
-        content = row.content
-        if content.target_type == "COMMENT":
-            result = await client.reply(
-                content.parent_content_id,
-                content.xsec_token,
-                body.body,
-                comment_id=content.platform_content_id,
+    except AutomationError as error:
+        detail = str(error)
+        status = 409 if "登录" in detail or "停止开关" in detail else 503
+        raise HTTPException(status, detail) from error
+    rows = list(
+        (
+            await db.scalars(
+                select(XiaohongshuOpportunity)
+                .options(selectinload(XiaohongshuOpportunity.content))
+                .where(XiaohongshuOpportunity.product_id == product_id)
+                .order_by(XiaohongshuOpportunity.opportunity_score.desc())
             )
-        else:
-            result = await client.comment(
-                content.platform_content_id, content.xsec_token, body.body
-            )
-    except ConfirmationError as error:
-        raise HTTPException(409, str(error)) from error
-    except XiaohongshuError as error:
-        raise HTTPException(503, str(error)) from error
-    finally:
-        await client.close()
-    row.status = "COMMENTED"
-    row.commented_at = datetime.now(timezone.utc)
-    await db.commit()
-    return {"status": "COMMENTED", "result": result}
+        ).all()
+    )
+    return [xiaohongshu_opportunity_out(row) for row in rows]
 
 
 @app.post("/v1/products", response_model=ProductOut, status_code=201)
@@ -271,8 +210,17 @@ async def create_product(body: ProductCreate, db: AsyncSession = Depends(get_db)
         name=body.name,
         website_url=str(body.website_url) if body.website_url else None,
         github_url=str(body.github_url) if body.github_url else None,
-        daily_reply_limit=min(body.daily_reply_limit, settings.max_daily_reply_limit),
-        disclosure_template="",
+        daily_reply_limit=min(body.daily_reply_limit, 2, settings.max_daily_reply_limit),
+        autopublish_enabled=True,
+        is_owned=True,
+        disclosure_template="自家做的",
+        auto_score_threshold=settings.xiaohongshu_auto_score_threshold,
+        auto_risk_threshold=settings.xiaohongshu_auto_risk_threshold,
+        search_interval_hours=settings.xiaohongshu_search_interval_hours,
+        min_publish_interval_hours=settings.xiaohongshu_min_publish_interval_hours,
+        keywords_per_run=settings.xiaohongshu_keywords_per_run,
+        details_per_keyword=settings.xiaohongshu_details_per_keyword,
+        next_auto_search_at=datetime.now(timezone.utc),
         sort_order=(max_order if max_order is not None else -1) + 1,
     )
     db.add(product)
@@ -437,6 +385,10 @@ async def brain_build(product_id: str, db: AsyncSession = Depends(get_db)):
     product = await get_product(product_id, db)
     try:
         version = await build_brain(db, product, provider_for(get_settings()))
+    except LLMProviderError as exc:
+        product.status = "ANALYSIS_FAILED"
+        await db.commit()
+        raise HTTPException(503, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
@@ -499,6 +451,12 @@ def xiaohongshu_opportunity_out(row: XiaohongshuOpportunity) -> OpportunityOut:
         risk_score=row.risk_score,
         recall_sources=[content.source_keyword, content.target_type],
         publish_status=row.status if row.status == "COMMENTED" else None,
+        generated_reply=row.draft_body,
+        target_type=content.target_type,
+        author_name=content.author_name,
+        score_reason=row.score_reason,
+        match_signals=row.match_signals or [],
+        publish_error=row.publish_error,
     )
 
 
@@ -559,6 +517,30 @@ async def opportunities(product_id: str, db: AsyncSession = Depends(get_db)):
             )
         )
     return out
+
+
+@app.post(
+    "/v1/xiaohongshu/opportunities/{opportunity_id}/generate-and-publish",
+    response_model=OpportunityOut,
+)
+async def generate_and_publish_xiaohongshu_opportunity(
+    opportunity_id: str, db: AsyncSession = Depends(get_db)
+):
+    client = XiaohongshuClient()
+    try:
+        row = await manually_generate_and_publish_opportunity(
+            db,
+            opportunity_id,
+            provider_for(get_settings()),
+            client,
+        )
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    except (XiaohongshuError, XiaohongshuTargetError) as error:
+        raise HTTPException(503, str(error)) from error
+    finally:
+        await client.close()
+    return xiaohongshu_opportunity_out(row)
 
 
 @app.get("/v1/opportunities/{candidate_id}", response_model=OpportunityOut)
@@ -1061,6 +1043,10 @@ async def kill_disable():
 async def autopublish_enable(product_id: str, db: AsyncSession = Depends(get_db)):
     product = await get_product(product_id, db)
     product.autopublish_enabled = True
+    product.automation_status = "IDLE"
+    product.automation_error = None
+    product.automation_failures = 0
+    product.next_auto_search_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(product)
     return product
@@ -1070,6 +1056,7 @@ async def autopublish_enable(product_id: str, db: AsyncSession = Depends(get_db)
 async def autopublish_disable(product_id: str, db: AsyncSession = Depends(get_db)):
     product = await get_product(product_id, db)
     product.autopublish_enabled = False
+    product.automation_status = "PAUSED"
     await db.commit()
     await db.refresh(product)
     return product

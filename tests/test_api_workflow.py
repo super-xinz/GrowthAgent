@@ -15,7 +15,7 @@ from app.providers import MockLLMProvider
 
 @pytest_asyncio.fixture
 async def api_client(tmp_path, monkeypatch):
-    db_path = tmp_path / "threadpilot-smoke.db"
+    db_path = tmp_path / "growthagent-smoke.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as connection:
@@ -43,11 +43,13 @@ async def test_complete_guarded_workflow(api_client):
         json={
             "name": "Smoke Pilot",
             "website_url": "https://example.com",
-            "daily_reply_limit": 3,
+            "daily_reply_limit": 2,
         },
     )
     assert created.status_code == 201
-    assert created.json()["disclosure_template"] == ""
+    assert created.json()["disclosure_template"] == "自家做的"
+    assert created.json()["autopublish_enabled"] is True
+    assert created.json()["daily_reply_limit"] == 2
     product_id = created.json()["id"]
 
     content = (
@@ -170,7 +172,7 @@ async def test_complete_guarded_workflow(api_client):
     assert (await client.get(f"/v1/products/{product_id}/audit-log")).json()
     assert (await client.get(f"/v1/products/{product_id}/risk-events")).status_code == 200
 
-    account = await client.post("/v1/reddit/accounts", json={"username": "threadpilot-smoke"})
+    account = await client.post("/v1/reddit/accounts", json={"username": "growthagent-smoke"})
     assert account.status_code == 201
     assert len((await client.get("/v1/reddit/accounts")).json()) == 1
     assert (await client.delete(f"/v1/reddit/accounts/{account.json()['id']}")).status_code == 200

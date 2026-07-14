@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {ChevronDown, Plus} from "lucide-react";
 import {useEffect, useRef, useState} from "react";
 import {filterProducts, type ProductNavItem} from "@/lib/navigation";
 import {zhLabel} from "@/lib/labels";
@@ -52,19 +53,21 @@ export default function ProductSwitcher({
           <strong>{current?.name || "选择产品"}</strong>
           <small>{current ? zhLabel(current.status) : `${products.length} 个产品`}</small>
         </span>
-        <span aria-hidden="true">⌄</span>
+        <ChevronDown className="switcher-chevron" size={15} aria-hidden="true" />
       </button>
       {open && (
         <div className="switcher-menu" id="product-switcher-menu">
-          <label className="switcher-search-label" htmlFor="product-search">搜索产品</label>
-          <input
-            id="product-search"
-            className="switcher-search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="输入产品名称"
-            autoFocus
-          />
+          {products.length > 6 && <>
+            <label className="switcher-search-label" htmlFor="product-search">搜索产品</label>
+            <input
+              id="product-search"
+              className="switcher-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="输入产品名称"
+              autoFocus
+            />
+          </>}
           <div className="switcher-list">
             {filtered.map((product) => (
               <Link
@@ -80,7 +83,7 @@ export default function ProductSwitcher({
             {!filtered.length && <div className="switcher-empty">没有匹配的产品</div>}
           </div>
           <Link className="switcher-create" href="/products/new" onClick={close}>
-            <span aria-hidden="true">＋</span> 新建产品
+            <Plus size={16} aria-hidden="true" /> 新建产品
           </Link>
         </div>
       )}

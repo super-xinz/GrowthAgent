@@ -1,7 +1,8 @@
 # Runbook
 
-- If source ingestion fails, verify that the URL is public and serves readable HTML or a public GitHub README.
-- If Product Brain fails, confirm at least one active source exists and the configured provider has credentials.
-- If a fixture import is repeated, unique content and candidate constraints make it idempotent.
-- There is no production publishing capability in this release. A safety incident therefore requires pausing ingestion and preserving logs.
-
+- 产品分析超时：系统会把网页证据压缩到 16,000 字符并给模型 150 秒；千问默认关闭深度思考。检查 `LLM_BASE_URL`、`LLM_STRONG_MODEL` 和额度。
+- 产品分析 401/403/404/429：界面会分别显示密钥、模型名或频率错误，不再统一显示“模型不可用”。
+- 智能搜索超时：账号不一定掉线。先看 `/account`；搜索浏览器 55 秒熔断，API 75 秒返回，不会再卡 5 分钟。
+- 自动任务显示 `ATTENTION`：保留具体错误；连续三次会转为 `PAUSED_SAFETY`。
+- 机会显示“发布状态待确认”：外部请求响应不确定，系统不会重试。到小红书原文人工核对是否已发布。
+- 紧急停止：设置 `GLOBAL_KILL_SWITCH=true` 并重启 API 与 worker。

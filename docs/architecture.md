@@ -1,12 +1,12 @@
 # Architecture
 
-This first delivery implements Phase 0, Phase 1, and the Phase 2 offline seam. FastAPI owns the product/source/brain/query/opportunity contracts. Celery is present as the durable task boundary. Next.js is the observation console. PostgreSQL is authoritative; Redis is task transport.
+GrowthAgent 只有一条主链路：`Product → Discovery → Qualified reply → Guarded publish`。
 
-The pipeline is intentionally staged rather than a free-running agent: ingest → evidence-backed brain → query graph → fixture normalization → deterministic candidate score. Live Reddit I/O, embeddings, publishing, and conversations remain behind future explicit phases.
+- FastAPI：产品资料、Product Brain、机会评分与自动发布领域逻辑；
+- Celery Beat：每 5 分钟检查到期产品；产品自己的搜索间隔默认为 3 小时；
+- PostgreSQL：产品、来源、Brain、公开内容、机会与自动化状态；
+- Redis：Celery broker / result backend；
+- Next.js：工作台、账号、产品任务和发现结果；
+- xiaohongshu-mcp：扫码登录、公开搜索、详情读取与单次评论/回复。
 
-## Reference-project decisions
-
-- Adopted: normalized social content, staged scoring, evidence preservation, replayable model runs, clear opportunity tables.
-- Rejected: account rotation, unsolicited DMs, browser automation, CAPTCHA/rate-limit bypass, generic multi-platform scraping, and wholesale LangGraph orchestration.
-- Deferred: high-concurrency enrichment and sophisticated visual narratives; they add cost before opportunity precision is proven.
-
+自动发布只接受模型评分，不接受启发式评分。评分模型异常时，候选最高 64 分。发布前再次验证登录、目标、冷却、日上限、机会分、风险分与全局停止开关。任何写请求异常都标记为 `PUBLISH_UNKNOWN`，不自动重试。

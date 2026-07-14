@@ -19,7 +19,7 @@ export default function NewProduct(){
     const github=String(data.get("github_url")||"").trim();
     if(!website&&!github){setError("请至少填写产品网站或 GitHub 仓库地址。");return}
     setBusy(true);setError("");setCreatedId(null);
-    const payload={name:data.get("name"),website_url:website||null,github_url:github||null,daily_reply_limit:3};
+    const payload={name:data.get("name"),website_url:website||null,github_url:github||null,daily_reply_limit:2};
     try{
       setStep("正在创建产品…");
       const createResponse=await fetch(`${API}/v1/products`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
@@ -37,11 +37,9 @@ export default function NewProduct(){
   }
 
   return <>
-    <div className="eyebrow">产品接入</div>
-    <h1>先让智能体理解真实的产品。</h1>
-    <p>系统只读取公开页面。生成的 Product Brain 会保留来源证据，并把未经验证的信息明确标记为不确定。</p>
+    <header className="page-header create-header"><div><div className="eyebrow">NEW PRODUCT</div><h1>添加产品</h1><p>一个公开地址，就能开始增长。</p></div></header>
     <form className="card form-card" onSubmit={submit}>
-      <label>产品名称<input name="name" required disabled={busy} placeholder="例如：ThreadPilot"/></label>
+      <label>产品名称<input name="name" required disabled={busy} placeholder="例如：GrowthAgent"/></label>
       <label>产品网站<input name="website_url" type="url" disabled={busy} placeholder="https://example.com"/></label>
       <div className="field-hint">产品网站和 GitHub 仓库至少填写一个。</div>
       <label>GitHub 仓库地址<input name="github_url" type="url" disabled={busy} placeholder="https://github.com/org/repo"/></label>

@@ -1,11 +1,11 @@
 import "./globals.css";
 import "./navigation.css";
 import {getProducts} from "@/lib/api";
-import SidebarNav from "./SidebarNav";
+import TopNav from "./SideNav";
 
 export const metadata = {
-  title: "ThreadPilot｜小红书评论增长助手",
-  description: "发现小红书真实需求，生成有依据的评论，并在人工确认后执行",
+  title: "GrowthAgent｜把真实需求变成增长",
+  description: "发现真实需求，自动完成克制、透明的产品沟通",
 };
 
 export default async function Layout({children}: {children: React.ReactNode}) {
@@ -13,9 +13,9 @@ export default async function Layout({children}: {children: React.ReactNode}) {
   return (
     <html lang="zh-CN">
       <body>
-        <div className="shell">
-          <SidebarNav products={products} />
-          <main className="main">{children}</main>
+        <div className="app-shell">
+          <TopNav products={products} />
+          <main className="workspace-main">{children}</main>
         </div>
       </body>
     </html>

@@ -45,7 +45,7 @@ class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     website_url: HttpUrl | None = None
     github_url: HttpUrl | None = None
-    daily_reply_limit: int = Field(default=3, ge=1, le=5)
+    daily_reply_limit: int = Field(default=2, ge=1, le=2)
 
     @model_validator(mode="after")
     def require_public_source(self):
@@ -58,10 +58,17 @@ class ProductUpdate(BaseModel):
     name: str | None = None
     website_url: HttpUrl | None = None
     github_url: HttpUrl | None = None
-    daily_reply_limit: int | None = Field(default=None, ge=1, le=5)
+    daily_reply_limit: int | None = Field(default=None, ge=1, le=2)
     autopublish_enabled: bool | None = None
     allow_first_reply_link: bool | None = None
     disclosure_template: str | None = None
+    is_owned: bool | None = None
+    auto_score_threshold: float | None = Field(default=None, ge=0.75, le=0.95)
+    auto_risk_threshold: float | None = Field(default=None, ge=0.05, le=0.5)
+    search_interval_hours: int | None = Field(default=None, ge=3, le=24)
+    min_publish_interval_hours: int | None = Field(default=None, ge=3, le=24)
+    keywords_per_run: int | None = Field(default=None, ge=1, le=5)
+    details_per_keyword: int | None = Field(default=None, ge=1, le=3)
     target_users: list[str] | None = None
     key_selling_points: list[str] | None = None
     forbidden_claims: list[str] | None = None
@@ -78,14 +85,6 @@ class XiaohongshuSearchIn(BaseModel):
     detail_limit: int = Field(default=3, ge=1, le=5)
 
 
-class XiaohongshuCommentBody(BaseModel):
-    body: str = Field(min_length=2, max_length=500)
-
-
-class XiaohongshuExecuteIn(XiaohongshuCommentBody):
-    token: str = Field(min_length=20, max_length=200)
-
-
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -97,6 +96,19 @@ class ProductOut(BaseModel):
     daily_reply_limit: int
     allow_first_reply_link: bool
     disclosure_template: str
+    is_owned: bool
+    auto_score_threshold: float
+    auto_risk_threshold: float
+    search_interval_hours: int
+    min_publish_interval_hours: int
+    keywords_per_run: int
+    details_per_keyword: int
+    automation_status: str
+    automation_error: str | None
+    automation_failures: int
+    last_auto_search_at: datetime | None
+    next_auto_search_at: datetime | None
+    last_auto_publish_at: datetime | None
     target_users: list
     key_selling_points: list
     forbidden_claims: list
@@ -137,6 +149,11 @@ class OpportunityOut(BaseModel):
     policy_decision: str | None = None
     generated_reply: str | None = None
     publish_status: str | None = None
+    target_type: str | None = None
+    author_name: str | None = None
+    score_reason: str | None = None
+    match_signals: list[str] = Field(default_factory=list)
+    publish_error: str | None = None
 
 
 class RedditAccountCreate(BaseModel):

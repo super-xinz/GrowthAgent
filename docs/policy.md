@@ -1,4 +1,11 @@
-# MVP policy
+# Automation policy
 
-The delivered application is shadow-only. There is no Reddit publishing endpoint or UI control. `AUTOPUBLISH_ENABLED` defaults false and cannot override the missing publisher. Product claims are generated only from stored public source excerpts. Production Reddit functionality must later require both `AUTOPUBLISH_ENABLED=true` and `COMMERCIAL_APPROVED`, alongside account, community, quota, decision, and kill-switch checks.
-
+- 自动门槛：机会分 ≥75，风险分 ≤35；
+- 默认节奏：3 小时一轮、3 个词、每词 2 个结果、每轮最多 1 条；
+- 默认发布限制：至少间隔 4 小时，每产品每天最多 2 条；
+- 连续 3 次异常：关闭该产品自动运行；
+- 内容：6–25 字、无链接、无夸张承诺、无虚假身份；
+- 自有产品：提及产品时必须用真实短语披露关系；
+- 明确反推广、敏感话题、已解决、上下文不足：跳过；
+- 外部写请求：从不重试；
+- 禁止：私信、关注、点赞、收藏、账号轮换、验证码或频控绕过。
