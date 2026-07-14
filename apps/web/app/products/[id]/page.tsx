@@ -12,10 +12,11 @@ export default async function ProductPage({params}:{params:Promise<{id:string}>}
   if(!p)notFound();
   const b=brain?.brain||{};
   return <>
-    <header className="product-heading"><div><div className="eyebrow">{b.category||"PRODUCT"} · BRAIN V{brain?.version||"—"}</div><h1>{p.name}</h1><p>{b.one_liner||"等待产品分析。"}</p></div><a className="button" href={`/products/${id}/opportunities`}>发现结果</a></header>
+    <header className="product-heading"><div><div className="eyebrow">{b.category||"产品"} · PRODUCT BRAIN V{brain?.version||"—"}</div><h1>{p.name}</h1><p>{b.one_liner||"等待产品分析。"}</p></div></header>
     <ProductModeControls product={p}/>
+    <div className="record-stack">
     <details className="details-section" open>
-      <summary><span><span className="eyebrow">TARGET</span><strong>目标定义</strong></span><span>＋</span></summary>
+      <summary><span><span className="eyebrow">Product Brain</span><strong>受众与需求</strong></span><span>＋</span></summary>
       <section className="grid brain-grid">
       <div className="card wide"><div className="label">目标用户</div><Items items={b.target_users}/></div>
       <div className="card wide"><div className="label">用户要完成的任务</div><Items items={b.jobs_to_be_done}/></div>
@@ -26,10 +27,11 @@ export default async function ProductPage({params}:{params:Promise<{id:string}>}
       <div className="card full"><div className="label">搜索信号</div><div className="signal-cloud">{[...(b.query_graph?.pain_phrases||[]),...(b.query_graph?.use_cases||[])].map((x:string)=><span key={x}>{x}</span>)}</div></div>
       </section>
     </details>
-    <details className="details-section"><summary><span><span className="eyebrow">EVIDENCE</span><strong>证据与设置</strong></span><span>＋</span></summary><section className="grid brain-grid">
+    <details className="details-section"><summary><span><span className="eyebrow">Evidence & Settings</span><strong>证据与设置</strong></span><span>＋</span></summary><section className="grid brain-grid">
       <div className="card full"><div className="label">有来源支持的能力</div>{(b.supported_claims||[]).map((c:any,i:number)=><div key={i} className="claim-row"><p>{c.claim}</p><blockquote>{c.source_quote}</blockquote></div>)}</div>
       <div className="card wide"><div className="label">不确定或缺少证据</div><Items items={b.unsupported_or_uncertain_claims}/></div>
       <div className="card wide"><div className="label">更新产品资料</div><ProductSettingsForm product={p}/><div className="subtle-actions"><RebuildBrainButton productId={id}/></div></div>
     </section></details>
+    </div>
   </>;
 }

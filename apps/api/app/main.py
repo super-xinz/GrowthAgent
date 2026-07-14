@@ -29,12 +29,16 @@ from .models import (
 )
 from .providers import provider_for
 from .providers import LLMProviderError
+from .runtime_settings import effective_settings, save_llm_settings
 from .schemas import (
     AnalyticsOverviewOut,
     BrainOut,
     ConversationOut,
     DecisionOut,
     FollowupIn,
+    LLMSettingsOut,
+    LLMSettingsUpdate,
+    LLMTestOut,
     OpportunityOut,
     ProductCreate,
     ProductOut,
@@ -74,7 +78,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="GrowthAgent Xiaohongshu Growth API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=list({"http://localhost:3000", get_settings().app_url.rstrip("/")}),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -90,6 +94,54 @@ async def health():
         "autopublish_scope": "per_product",
         "kill_switch": settings.global_kill_switch,
     }
+
+
+def llm_settings_response(settings) -> LLMSettingsOut:
+    key = settings.llm_api_key or ""
+    return LLMSettingsOut(
+        provider=settings.llm_provider,
+        base_url=settings.llm_base_url,
+        model=settings.llm_strong_model,
+        enable_thinking=settings.llm_enable_thinking,
+        api_key_configured=bool(key),
+        api_key_hint=f"••••{key[-4:]}" if key else None,
+    )
+
+
+@app.get("/v1/settings/llm", response_model=LLMSettingsOut)
+async def get_llm_settings(db: AsyncSession = Depends(get_db)):
+    return llm_settings_response(await effective_settings(db))
+
+
+@app.put("/v1/settings/llm", response_model=LLMSettingsOut)
+async def update_llm_settings(
+    body: LLMSettingsUpdate, db: AsyncSession = Depends(get_db)
+):
+    current = await effective_settings(db)
+    api_key = "" if body.clear_api_key else (body.api_key or current.llm_api_key)
+    if body.provider != "mock" and (not api_key or not body.model.strip()):
+        raise HTTPException(422, "在线模型需要 API Key 和模型名称")
+    payload = {
+        "llm_provider": body.provider,
+        "llm_api_key": api_key,
+        "llm_base_url": str(body.base_url).rstrip("/"),
+        "llm_strong_model": body.model.strip(),
+        "llm_enable_thinking": body.enable_thinking,
+    }
+    await save_llm_settings(db, payload)
+    return llm_settings_response(await effective_settings(db))
+
+
+@app.post("/v1/settings/llm/test", response_model=LLMTestOut)
+async def test_llm_settings(db: AsyncSession = Depends(get_db)):
+    settings = await effective_settings(db)
+    if settings.llm_provider == "mock":
+        return LLMTestOut(ok=True, message="Mock 模式可用，不会调用外部模型。")
+    try:
+        await provider_for(settings).generate_text("只回复 OK")
+    except (LLMProviderError, ValueError) as error:
+        raise HTTPException(422, str(error)) from error
+    return LLMTestOut(ok=True, message="模型连接成功。")
 
 
 async def xhs_call(method: str):
@@ -128,7 +180,8 @@ async def search_xiaohongshu(
 ):
     product = await get_product(product_id, db)
     client = XiaohongshuClient()
-    provider = provider_for(get_settings())
+    settings = await effective_settings(db)
+    provider = provider_for(settings)
     try:
         imported = await import_search_opportunities(
             db, product_id, client, body.keyword.strip(), provider, detail_limit=body.detail_limit
@@ -151,7 +204,7 @@ async def search_xiaohongshu(
                 db,
                 product,
                 client,
-                kill_switch=get_settings().global_kill_switch,
+                kill_switch=settings.global_kill_switch,
                 opportunity_ids=list({row.id for row in imported}),
             )
         except (XiaohongshuError, XiaohongshuTargetError) as error:
@@ -175,12 +228,13 @@ async def search_xiaohongshu(
 async def auto_search_xiaohongshu(
     product_id: str, db: AsyncSession = Depends(get_db)
 ):
+    settings = await effective_settings(db)
     try:
         await run_product_automation(
             db,
             product_id,
-            provider_for(get_settings()),
-            get_settings(),
+            provider_for(settings),
+            settings,
             force=True,
         )
     except AutomationError as error:
@@ -384,7 +438,7 @@ async def ingest(product_id: str, db: AsyncSession = Depends(get_db)):
 async def brain_build(product_id: str, db: AsyncSession = Depends(get_db)):
     product = await get_product(product_id, db)
     try:
-        version = await build_brain(db, product, provider_for(get_settings()))
+        version = await build_brain(db, product, provider_for(await effective_settings(db)))
     except LLMProviderError as exc:
         product.status = "ANALYSIS_FAILED"
         await db.commit()
@@ -531,7 +585,7 @@ async def generate_and_publish_xiaohongshu_opportunity(
         row = await manually_generate_and_publish_opportunity(
             db,
             opportunity_id,
-            provider_for(get_settings()),
+            provider_for(await effective_settings(db)),
             client,
         )
     except ValueError as error:

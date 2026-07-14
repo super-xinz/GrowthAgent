@@ -5,6 +5,7 @@ from .automation import run_due_automations
 from .database import SessionLocal
 from .providers import provider_for
 from .product_lifecycle import purge_expired_products as purge_expired
+from .runtime_settings import effective_settings
 
 settings = get_settings()
 celery_app = Celery(
@@ -47,10 +48,11 @@ def purge_expired_products_task():
 def run_xiaohongshu_automation_task():
     async def run():
         async with SessionLocal() as session:
+            runtime_settings = await effective_settings(session)
             return await run_due_automations(
                 session,
-                provider_for(settings),
-                settings,
+                provider_for(runtime_settings),
+                runtime_settings,
             )
 
     return {"products": asyncio.run(run())}

@@ -1,6 +1,35 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+
+
+class LLMSettingsUpdate(BaseModel):
+    provider: Literal["mock", "openai"] = "openai"
+    api_key: str | None = Field(default=None, max_length=500)
+    base_url: HttpUrl = "https://api.openai.com/v1"
+    model: str = Field(default="", max_length=200)
+    enable_thinking: bool = False
+    clear_api_key: bool = False
+
+    @model_validator(mode="after")
+    def validate_online_provider(self):
+        if self.provider == "openai" and not self.model.strip():
+            raise ValueError("在线模型需要填写模型名称")
+        return self
+
+
+class LLMSettingsOut(BaseModel):
+    provider: str
+    base_url: str
+    model: str
+    enable_thinking: bool
+    api_key_configured: bool
+    api_key_hint: str | None = None
+
+
+class LLMTestOut(BaseModel):
+    ok: bool
+    message: str
 
 
 class ProductBrainClaim(BaseModel):
